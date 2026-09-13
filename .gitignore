@@ -7,6 +7,11 @@ node_modules
 .cdk.staging
 cdk.out
 
+# Cached context lookups. AWS recommends committing this file so synthesis is
+# reproducible; it is ignored here because its keys carry the account id and this
+# repository is public. See docs/adr/0010-*.md — a team repository should commit it.
+cdk.context.json
+
 # Agent tooling that is generated, not authored.
 # .claude/skills/* are absolute symlinks into .agents/skills/*; .atl/ is a
 # regenerated registry cache. Both are reproducible from skills-lock.json.

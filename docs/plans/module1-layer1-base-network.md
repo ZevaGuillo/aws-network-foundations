@@ -50,7 +50,7 @@ silently.
 
 | Item | Why it matters | Plan |
 |---|---|---|
-| `bin/aws-network-foundations.ts` has no `env` | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Set it from `CDK_DEFAULT_*` in the next work unit |
+| ~~`bin/aws-network-foundations.ts` has no `env`~~ | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Done — resolved from `CDK_DEFAULT_*` through a guard that throws rather than degrading silently, [ADR-0010](../adr/0010-resolve-the-deployment-environment-from-the-cli.md). Subnets now synthesize to `us-east-1a` / `us-east-1b` instead of `Fn::GetAZs` |
 | ~~`test/` still holds the generated placeholder~~ | Pulled into this layer rather than deferred: the configuration comment and [ADR-0004](../adr/0004-intentional-cidr-overlap.md) both claim a test protects the intentional collision, and shipping that claim without the test would make it false | Done — see §5 |
 | Stack file is the generated name, not `lib/moduleN-*/` | Renaming the *file* is free. Renaming the **stack id in `bin/`** creates a different CloudFormation stack and orphans the old one. | Keep the current name through layer 1; restructure once, deliberately, when module 2 arrives |
 

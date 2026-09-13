@@ -26,3 +26,4 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0007](0007-slash-24-subnet-mask.md) | Split the VPC into /24 subnets | Accepted | 2026-09-13 |
 | [0008](0008-s3-gateway-endpoint.md) | Put the S3 gateway endpoint in the base network | Accepted | 2026-09-13 |
 | [0009](0009-declare-dns-support-explicitly.md) | Declare DNS support explicitly | Accepted | 2026-09-13 |
+| [0010](0010-resolve-the-deployment-environment-from-the-cli.md) | Resolve the deployment environment from the CLI, and fail without it | Accepted | 2026-09-13 |
