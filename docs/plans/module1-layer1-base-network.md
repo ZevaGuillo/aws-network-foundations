@@ -1,7 +1,7 @@
 # Implementation Plan — Module 1, Layer 1: Base Network
 
 **Status:** implemented
-**Scope:** `lib/config.ts` + `lib/aws-network-foundations-stack.ts` (VPC only), with the
+**Scope:** `lib/config.ts` + `lib/module1-base-network-stack.ts` (VPC only), with the
 assertions that guard them
 **Date:** 2026-09-13
 
@@ -36,7 +36,7 @@ cannot be changed after creation.
 | File | Contents |
 |---|---|
 | `lib/config.ts` | Repo-wide IPv4 address plan; module 1 network parameters. No CDK imports — [ADR-0005](../adr/0005-framework-free-configuration-module.md) |
-| `lib/aws-network-foundations-stack.ts` | The VPC: subnets, NAT, S3 gateway endpoint, and the property that makes the NAT count deployable-tunable |
+| `lib/module1-base-network-stack.ts` | The VPC: subnets, NAT, S3 gateway endpoint, and the property that makes the NAT count deployable-tunable |
 
 ### Out of scope for this layer
 
@@ -50,9 +50,9 @@ silently.
 
 | Item | Why it matters | Plan |
 |---|---|---|
-| ~~`bin/aws-network-foundations.ts` has no `env`~~ | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Done — resolved from `CDK_DEFAULT_*` through a guard that throws rather than degrading silently, [ADR-0010](../adr/0010-resolve-the-deployment-environment-from-the-cli.md). Subnets now synthesize to `us-east-1a` / `us-east-1b` instead of `Fn::GetAZs` |
+| ~~`bin/app.ts` has no `env`~~ | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Done — resolved from `CDK_DEFAULT_*` through a guard that throws rather than degrading silently, [ADR-0010](../adr/0010-resolve-the-deployment-environment-from-the-cli.md). Subnets now synthesize to `us-east-1a` / `us-east-1b` instead of `Fn::GetAZs` |
 | ~~`test/` still holds the generated placeholder~~ | Pulled into this layer rather than deferred: the configuration comment and [ADR-0004](../adr/0004-intentional-cidr-overlap.md) both claim a test protects the intentional collision, and shipping that claim without the test would make it false | Done — see §5 |
-| Stack file is the generated name, not `lib/moduleN-*/` | Renaming the *file* is free. Renaming the **stack id in `bin/`** creates a different CloudFormation stack and orphans the old one. | Keep the current name through layer 1; restructure once, deliberately, when module 2 arrives |
+| ~~Stack file is the generated name, not `lib/moduleN-*/`~~ | Renaming the *file* is free. Renaming the **stack id in `bin/`** creates a different CloudFormation stack and orphans the old one. | Done, **reversing the original plan of deferring to module 2.** That deferral justified itself with a cost that only exists after the first deploy, and so scheduled the change for a point where it would no longer be free. `aws cloudformation describe-stacks` confirmed nothing was deployed, and the rename landed while it cost nothing: stack id `Net-M1-Base`, class `Module1BaseNetworkStack`, file `lib/module1-base-network-stack.ts`, entry point `bin/app.ts`. [ADR-0011](../adr/0011-name-stacks-by-module-before-the-first-deploy.md) |
 
 ---
 
@@ -84,7 +84,7 @@ of a CloudFormation failure twenty minutes into a deployment.
 
 ---
 
-## 4. `lib/aws-network-foundations-stack.ts`
+## 4. `lib/module1-base-network-stack.ts`
 
 **One job:** compose CDK constructs from configuration values. No literals, no magic numbers.
 

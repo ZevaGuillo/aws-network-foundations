@@ -1,11 +1,22 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
-import { AwsNetworkFoundationsStack } from '../lib/aws-network-foundations-stack';
+import { Module1BaseNetworkStack } from '../lib/module1-base-network-stack';
 import { resolveEnvironment } from '../lib/environment';
 
 const app = new cdk.App();
 
-new AwsNetworkFoundationsStack(app, 'AwsNetworkFoundationsStack', {
+/**
+ * The second argument is the construct id, and for a stack directly under the app it becomes
+ * the CloudFormation stack name verbatim. It is the one identifier in this file that cannot be
+ * changed later: renaming a deployed stack does not rename it, it creates a second one and
+ * leaves the first behind holding every resource.
+ *
+ * `Net-M1-Base` names the module rather than the repository, because the repository will hold
+ * five of these and `AwsNetworkFoundationsStack` would not distinguish any of them.
+ *
+ * See docs/adr/0011-name-stacks-by-module-before-the-first-deploy.md.
+ */
+new Module1BaseNetworkStack(app, 'Net-M1-Base', {
   /**
    * The account and region this stack is specialized for, read from the credentials the CDK
    * CLI resolved rather than written here.

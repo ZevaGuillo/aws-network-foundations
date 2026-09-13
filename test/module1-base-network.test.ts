@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import { Template } from 'aws-cdk-lib/assertions';
-import { AwsNetworkFoundationsStack } from '../lib/aws-network-foundations-stack';
+import { Module1BaseNetworkStack } from '../lib/module1-base-network-stack';
 import { IPV4_ADDRESS_PLAN, MODULE_1_NETWORK } from '../lib/config';
 
 /**
@@ -11,9 +11,9 @@ import { IPV4_ADDRESS_PLAN, MODULE_1_NETWORK } from '../lib/config';
  * intentional address collision can be "corrected" without anything turning red.
  */
 
-function synth(props?: ConstructorParameters<typeof AwsNetworkFoundationsStack>[2]): Template {
+function synth(props?: ConstructorParameters<typeof Module1BaseNetworkStack>[2]): Template {
   const app = new cdk.App();
-  return Template.fromStack(new AwsNetworkFoundationsStack(app, 'TestStack', props));
+  return Template.fromStack(new Module1BaseNetworkStack(app, 'TestStack', props));
 }
 
 describe('base network', () => {

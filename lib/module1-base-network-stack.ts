@@ -3,7 +3,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 import { MODULE_1_NETWORK } from './config';
 
-export interface AwsNetworkFoundationsStackProps extends cdk.StackProps {
+export interface Module1BaseNetworkStackProps extends cdk.StackProps {
   /**
    * Number of NAT Gateways. Defaults to MODULE_1_NETWORK.natGateways.
    *
@@ -24,11 +24,11 @@ export interface AwsNetworkFoundationsStackProps extends cdk.StackProps {
  * why and the cost at the point of use; the records hold the alternatives and the full
  * argument.
  */
-export class AwsNetworkFoundationsStack extends cdk.Stack {
+export class Module1BaseNetworkStack extends cdk.Stack {
   /** Consumed by module 1's later layers, and by modules 2 and 5. */
   public readonly vpc: ec2.Vpc;
 
-  constructor(scope: Construct, id: string, props?: AwsNetworkFoundationsStackProps) {
+  constructor(scope: Construct, id: string, props?: Module1BaseNetworkStackProps) {
     super(scope, id, props);
 
     this.vpc = new ec2.Vpc(this, 'Vpc', {

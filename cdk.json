@@ -1,5 +1,5 @@
 {
-  "app": "npx tsc && npx tsx bin/aws-network-foundations.ts",
+  "app": "npx tsc && npx tsx bin/app.ts",
   "watch": {
     "include": [
       "**"

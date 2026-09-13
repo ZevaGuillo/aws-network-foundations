@@ -45,7 +45,7 @@ npm test                 # 12 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
-Reading `cdk.out/AwsNetworkFoundationsStack.template.json` after a synth is the fastest way to
+Reading `cdk.out/Net-M1-Base.template.json` after a synth is the fastest way to
 understand what the CDK actually does: roughly 140 lines of TypeScript become roughly 400 lines
 of CloudFormation.
 
@@ -115,11 +115,11 @@ deployment, so a test asserts the collision still holds.
 ## Layout
 
 ```
-bin/          app entry point — resolves the account and region
+bin/app.ts    app entry point — resolves the account and region, names the stack
 lib/
   config.ts       the address plan, importing nothing from the CDK
   environment.ts  account and region resolution, with a guard
-  aws-network-foundations-stack.ts
+  module1-base-network-stack.ts  the VPC: subnets, NAT, S3 gateway endpoint
 test/         assertions against the synthesized template
 docs/
   adr/        one record per decision, Nygard format
