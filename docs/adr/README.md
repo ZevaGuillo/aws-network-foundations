@@ -19,3 +19,10 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 |---|---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions in ADRs | Accepted | 2026-09-13 |
 | [0002](0002-self-contained-repository.md) | The repository is self-contained | Accepted | 2026-09-13 |
+| [0003](0003-repo-wide-ipv4-addressing-plan.md) | Fix the IPv4 addressing plan before the first VPC | Accepted | 2026-09-13 |
+| [0004](0004-intentional-cidr-overlap.md) | Reserve an intentional CIDR overlap for the PrivateLink experiment | Accepted | 2026-09-13 |
+| [0005](0005-framework-free-configuration-module.md) | Keep the configuration module free of CDK types | Accepted | 2026-09-13 |
+| [0006](0006-single-nat-gateway-by-default.md) | One NAT Gateway by default, parameterizable per deployment | Accepted | 2026-09-13 |
+| [0007](0007-slash-24-subnet-mask.md) | Split the VPC into /24 subnets | Accepted | 2026-09-13 |
+| [0008](0008-s3-gateway-endpoint.md) | Put the S3 gateway endpoint in the base network | Accepted | 2026-09-13 |
+| [0009](0009-declare-dns-support-explicitly.md) | Declare DNS support explicitly | Accepted | 2026-09-13 |
