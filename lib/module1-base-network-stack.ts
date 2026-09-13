@@ -84,6 +84,29 @@ export class Module1BaseNetworkStack extends cdk.Stack {
           subnetType: ec2.SubnetType.PUBLIC,
 
           /**
+           * The CDK defaults this to `true` on public subnets, which means anything launched
+           * here receives a public IPv4 address without anyone asking for one.
+           *
+           * Nothing in this layer changes: every instance in this architecture goes in a
+           * private subnet, and neither of the two things that do live out here needs it — a
+           * NAT Gateway carries its own Elastic IP, and a load balancer is addressed through
+           * its own DNS name. So the value costs nothing today and removes a silent failure
+           * later: a compute tier placed in the wrong subnet group reaches the internet by
+           * default instead of failing to.
+           *
+           * What this does not do is close the hole. The subnet still routes to the internet
+           * gateway, and a launch template with `associatePublicIpAddress` or an explicitly
+           * attached Elastic IP still gets an address. It removes the default, not the
+           * capability — the security group is what closes it.
+           *
+           * Legal only on PUBLIC subnets: the CDK throws `MapPublicIpNotAllowed` if the
+           * property appears on any other subnet type.
+           *
+           * See docs/adr/0012-never-auto-assign-public-ipv4-addresses.md.
+           */
+          mapPublicIpOnLaunch: false,
+
+          /**
            * A /24 yields 251 usable addresses, not 256. AWS reserves five in every subnet
            * regardless of size: the network address, the VPC router, DNS, one held for future
            * use, and broadcast — reserved even though AWS does not support broadcast. The same

@@ -41,7 +41,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 12 assertions, no AWS account touched
+npm test                 # 13 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
@@ -83,7 +83,7 @@ S3 gateway endpoint carry no hourly charge.
 | Resource | Count | Detail |
 |---|---|---|
 | `AWS::EC2::VPC` | 1 | `10.0.0.0/16`, DNS hostnames and support both enabled |
-| `AWS::EC2::Subnet` | 4 | `10.0.0.0/24` and `10.0.1.0/24` public, `10.0.2.0/24` and `10.0.3.0/24` private with egress |
+| `AWS::EC2::Subnet` | 4 | `10.0.0.0/24` and `10.0.1.0/24` public, `10.0.2.0/24` and `10.0.3.0/24` private with egress — none auto-assign a public IPv4 address |
 | `AWS::EC2::NatGateway` | 1 | configurable; two when the stack property is set to 2 |
 | `AWS::EC2::EIP` | 1 | one address to reclaim after teardown |
 | `AWS::EC2::InternetGateway` | 1 | |
@@ -142,6 +142,12 @@ deployment, and the intentional address overlap can be "corrected" without any s
 
 The overlap guard was mutation-tested rather than assumed — replacing the reference with a
 different literal was confirmed to turn the suite red. A test that cannot fail protects nothing.
+
+They also avoid asserting on framework defaults, which is a subtler failure than not failing.
+The public-subnet count once filtered on `MapPublicIpOnLaunch`; turning that attribute off — the
+correct setting, [ADR-0012](docs/adr/0012-never-auto-assign-public-ipv4-addresses.md) — dropped
+the count to zero and failed a test about a network that had not changed. It follows route
+tables to the internet gateway now. A test that blocks a correct change is reporting on itself.
 
 ## Commands
 

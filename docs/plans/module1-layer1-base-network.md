@@ -53,6 +53,7 @@ silently.
 | ~~`bin/app.ts` has no `env`~~ | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Done — resolved from `CDK_DEFAULT_*` through a guard that throws rather than degrading silently, [ADR-0010](../adr/0010-resolve-the-deployment-environment-from-the-cli.md). Subnets now synthesize to `us-east-1a` / `us-east-1b` instead of `Fn::GetAZs` |
 | ~~`test/` still holds the generated placeholder~~ | Pulled into this layer rather than deferred: the configuration comment and [ADR-0004](../adr/0004-intentional-cidr-overlap.md) both claim a test protects the intentional collision, and shipping that claim without the test would make it false | Done — see §5 |
 | ~~Stack file is the generated name, not `lib/moduleN-*/`~~ | Renaming the *file* is free. Renaming the **stack id in `bin/`** creates a different CloudFormation stack and orphans the old one. | Done, **reversing the original plan of deferring to module 2.** That deferral justified itself with a cost that only exists after the first deploy, and so scheduled the change for a point where it would no longer be free. `aws cloudformation describe-stacks` confirmed nothing was deployed, and the rename landed while it cost nothing: stack id `Net-M1-Base`, class `Module1BaseNetworkStack`, file `lib/module1-base-network-stack.ts`, entry point `bin/app.ts`. [ADR-0011](../adr/0011-name-stacks-by-module-before-the-first-deploy.md) |
+| ~~Public subnets auto-assign public IPv4 addresses~~ | A CDK default, not a decision. Every compute tier here belongs in a private subnet; with auto-assign on, one placed in the wrong group comes up internet-reachable and healthy. | Done — `mapPublicIpOnLaunch: false`, [ADR-0012](../adr/0012-never-auto-assign-public-ipv4-addresses.md). Forced the public-subnet assertion in §5 to stop reading that attribute and follow route tables instead |
 
 ---
 
@@ -115,7 +116,7 @@ export machinery yet; layers 2 and up live in the same stack for now.
 
 ## 5. Verification — done
 
-`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — 7 passed.
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — 13 passed.
 
 What the synthesized template actually contains:
 
@@ -140,6 +141,21 @@ The guard was mutation-tested rather than assumed: replacing the reference with 
 literal was confirmed to turn the suite red, and the change was reverted. A test that cannot
 fail protects nothing, and this one is written as an identity check, so verifying it was not
 optional.
+
+### The assertion that had to be rewritten
+
+The public-subnet count identified its subjects by filtering on `MapPublicIpOnLaunch`, which is
+a CDK default rather than anything decided here. Setting that attribute to `false`
+([ADR-0012](../adr/0012-never-auto-assign-public-ipv4-addresses.md)) dropped the count to zero
+and turned the test red over a network that was entirely correct — the test was standing in the
+way of the security decision it should have been indifferent to.
+
+It now follows route tables: public subnets are the ones whose default route reaches the
+internet gateway, private the ones that reach the NAT Gateway. Both directions were
+mutation-tested. Removing `mapPublicIpOnLaunch: false` fails **only** the new auto-assign
+assertion and leaves the topology test green, which is the decoupling being verified directly.
+Switching the private subnets to `PRIVATE_ISOLATED` fails the topology test, which confirms it
+still detects a real change.
 
 ---
 

@@ -16,6 +16,24 @@ function synth(props?: ConstructorParameters<typeof Module1BaseNetworkStack>[2])
   return Template.fromStack(new Module1BaseNetworkStack(app, 'TestStack', props));
 }
 
+/**
+ * The subnets whose default route leaves through a given kind of target.
+ *
+ * `target` is the property a `AWS::EC2::Route` uses to name where 0.0.0.0/0 goes: `GatewayId`
+ * for the internet gateway, `NatGatewayId` for the NAT. Following route table -> association
+ * -> subnet is how the network itself decides what "public" means, rather than any attribute
+ * hung off the subnet.
+ */
+function subnetsRoutedThrough(template: Template, target: 'GatewayId' | 'NatGatewayId'): string[] {
+  const routeTableIds = Object.values(template.findResources('AWS::EC2::Route'))
+    .filter((r) => r.Properties.DestinationCidrBlock === '0.0.0.0/0' && r.Properties[target])
+    .map((r) => r.Properties.RouteTableId.Ref);
+
+  return Object.values(template.findResources('AWS::EC2::SubnetRouteTableAssociation'))
+    .filter((a) => routeTableIds.includes(a.Properties.RouteTableId.Ref))
+    .map((a) => a.Properties.SubnetId.Ref);
+}
+
 describe('base network', () => {
   test('spans the planned address range with DNS enabled', () => {
     // DNS is asserted because module 4's private endpoint DNS depends on it, and nothing in
@@ -31,7 +49,8 @@ describe('base network', () => {
   test('provisions four /24 subnets, two public and two private', () => {
     // The mask is immutable after creation, so a drift here is only fixable by replacing the
     // subnet and everything in it. docs/adr/0007-slash-24-subnet-mask.md
-    const subnets = Object.values(synth().findResources('AWS::EC2::Subnet'));
+    const template = synth();
+    const subnets = Object.values(template.findResources('AWS::EC2::Subnet'));
 
     expect(subnets).toHaveLength(4);
 
@@ -41,8 +60,27 @@ describe('base network', () => {
       );
     }
 
-    const publicSubnets = subnets.filter((s) => s.Properties.MapPublicIpOnLaunch);
-    expect(publicSubnets).toHaveLength(2);
+    // A subnet is public because its route table reaches the internet gateway, and private
+    // because it reaches the NAT Gateway instead. That routing *is* the topology, so it is
+    // what gets asserted.
+    //
+    // The obvious shortcut — filtering on MapPublicIpOnLaunch — was tried and rejected. It
+    // reads a CDK default rather than a decision here, and it made the correct security
+    // setting in ADR-0012 look like a broken test: switch auto-assign off and the count of
+    // "public" subnets drops to zero while the network is unchanged.
+    expect(subnetsRoutedThrough(template, 'GatewayId')).toHaveLength(2);
+    expect(subnetsRoutedThrough(template, 'NatGatewayId')).toHaveLength(2);
+  });
+
+  test('never auto-assigns a public IPv4 address, in any subnet', () => {
+    // Public subnets default to true, so an instance landing in the wrong subnet group would
+    // be addressable from the internet without a line of code asking for it.
+    // docs/adr/0012-never-auto-assign-public-ipv4-addresses.md
+    const subnets = Object.values(synth().findResources('AWS::EC2::Subnet'));
+
+    for (const subnet of subnets) {
+      expect(subnet.Properties.MapPublicIpOnLaunch).toBe(false);
+    }
   });
 
   test('reaches S3 through a free gateway endpoint rather than the NAT Gateway', () => {
