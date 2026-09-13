@@ -26,6 +26,11 @@ not yet specified.
 - **An AWS account with working credentials.** `aws sts get-caller-identity` must return an
   identity and `aws configure get region` must return a region.
 
+Both are enforced rather than assumed. `npm install` refuses on anything below Node 22 —
+`engines` plus `engine-strict` in `.npmrc`, [ADR-0013](docs/adr/0013-refuse-to-install-on-an-unsupported-node-version.md)
+— because types describing a newer runtime than the one you are running let `tsc` accept code
+that fails at execution.
+
 There is no `.env` file to create, and adding one would be a mistake. The CDK is a build-time
 synthesizer, not a running application: credentials come from the AWS credential chain
 (`~/.aws/credentials`, `~/.aws/config`, environment variables, SSO), which is machine-level and

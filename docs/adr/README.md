@@ -29,3 +29,4 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0010](0010-resolve-the-deployment-environment-from-the-cli.md) | Resolve the deployment environment from the CLI, and fail without it | Accepted | 2026-09-13 |
 | [0011](0011-name-stacks-by-module-before-the-first-deploy.md) | Name stacks by module, before the first deploy | Accepted | 2026-09-13 |
 | [0012](0012-never-auto-assign-public-ipv4-addresses.md) | Never auto-assign public IPv4 addresses | Accepted | 2026-09-13 |
+| [0013](0013-refuse-to-install-on-an-unsupported-node-version.md) | Refuse to install on an unsupported Node version | Accepted | 2026-09-13 |
