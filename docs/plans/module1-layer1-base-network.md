@@ -1,7 +1,8 @@
 # Implementation Plan — Module 1, Layer 1: Base Network
 
-**Status:** proposed, not implemented
-**Scope:** `lib/config.ts` + `lib/aws-network-foundations-stack.ts` (VPC only)
+**Status:** implemented
+**Scope:** `lib/config.ts` + `lib/aws-network-foundations-stack.ts` (VPC only), with the
+assertions that guard them
 **Date:** 2026-09-13
 
 The decisions behind this plan are recorded individually in [`docs/adr/`](../adr/README.md).
@@ -50,7 +51,7 @@ silently.
 | Item | Why it matters | Plan |
 |---|---|---|
 | `bin/aws-network-foundations.ts` has no `env` | An environment-agnostic stack resolves availability zones to synth-time placeholders and cannot perform context lookups. "Exactly two AZs" only means two *concrete* zones once `env` is set. | Set it from `CDK_DEFAULT_*` in the next work unit |
-| `test/` still holds the generated placeholder | Nothing currently guards the NAT count, the subnet mask, or the intentional address collision | Add synthesis assertions next — see §5 |
+| ~~`test/` still holds the generated placeholder~~ | Pulled into this layer rather than deferred: the configuration comment and [ADR-0004](../adr/0004-intentional-cidr-overlap.md) both claim a test protects the intentional collision, and shipping that claim without the test would make it false | Done — see §5 |
 | Stack file is the generated name, not `lib/moduleN-*/` | Renaming the *file* is free. Renaming the **stack id in `bin/`** creates a different CloudFormation stack and orphans the old one. | Keep the current name through layer 1; restructure once, deliberately, when module 2 arrives |
 
 ---
@@ -112,20 +113,33 @@ export machinery yet; layers 2 and up live in the same stack for now.
 
 ---
 
-## 5. Verification — next work unit, not this one
+## 5. Verification — done
 
-1. `npx tsc --noEmit` — types compile.
-2. `npx cdk synth` — template renders.
-3. Assertions against the synthesized template:
-   - exactly one `AWS::EC2::NatGateway` by default; exactly two when the property is set to 2
-   - exactly four `AWS::EC2::Subnet`, every one a `/24`
-   - `EnableDnsHostnames` and `EnableDnsSupport` both true on the VPC
-   - one `Gateway`-type `AWS::EC2::VPCEndpoint` for S3
-   - **the intentional module 3 / module 4 address collision still holds**
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — 7 passed.
 
-The last one is the point. It converts a comment that asks people not to break something into a
-test that stops them — the measure named in
-[ADR-0004](../adr/0004-intentional-cidr-overlap.md).
+What the synthesized template actually contains:
+
+| Resource | Count | Detail |
+|---|---|---|
+| `AWS::EC2::VPC` | 1 | `10.0.0.0/16`, DNS hostnames and support both true |
+| `AWS::EC2::Subnet` | 4 | `10.0.0.0/24` and `10.0.1.0/24` public, `10.0.2.0/24` and `10.0.3.0/24` private |
+| `AWS::EC2::NatGateway` | 1 | two when the property is set to 2 |
+| `AWS::EC2::EIP` | 1 | one address to reclaim after teardown, not two |
+| `AWS::EC2::InternetGateway` | 1 | |
+| `AWS::EC2::RouteTable` | 4 | one per subnet |
+| `AWS::EC2::VPCEndpoint` | 1 | `Gateway` type, S3 |
+
+### The assertion that matters
+
+The address-collision guard is the reason this layer carries tests at all. Everything else
+here fails loudly if it drifts; that one does not. Separating module 4's range from module 3's
+deletes the experiment without breaking a deployment — no stack fails, no template changes,
+nothing turns red.
+
+The guard was mutation-tested rather than assumed: replacing the reference with a different
+literal was confirmed to turn the suite red, and the change was reverted. A test that cannot
+fail protects nothing, and this one is written as an identity check, so verifying it was not
+optional.
 
 ---
 

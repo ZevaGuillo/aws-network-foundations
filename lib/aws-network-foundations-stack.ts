@@ -1,16 +1,142 @@
 import * as cdk from 'aws-cdk-lib/core';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import { MODULE_1_NETWORK } from './config';
 
+export interface AwsNetworkFoundationsStackProps extends cdk.StackProps {
+  /**
+   * Number of NAT Gateways. Defaults to MODULE_1_NETWORK.natGateways.
+   *
+   * This is the only network value exposed as a property, because it is the only one that
+   * changes the bill from one deployment to the next. Everything else stays in config, where
+   * it is reviewed once. See docs/adr/0006-single-nat-gateway-by-default.md.
+   */
+  readonly natGateways?: number;
+}
+
+/**
+ * Module 1, layer 1 — the base network.
+ *
+ * A VPC across two availability zones with public and private subnets, the private ones
+ * carrying egress so instances can install packages at boot.
+ *
+ * The decisions behind every value here are recorded in docs/adr/. Comments below state the
+ * why and the cost at the point of use; the records hold the alternatives and the full
+ * argument.
+ */
 export class AwsNetworkFoundationsStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  /** Consumed by module 1's later layers, and by modules 2 and 5. */
+  public readonly vpc: ec2.Vpc;
+
+  constructor(scope: Construct, id: string, props?: AwsNetworkFoundationsStackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    this.vpc = new ec2.Vpc(this, 'Vpc', {
+      ipAddresses: ec2.IpAddresses.cidr(MODULE_1_NETWORK.vpcCidr),
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'AwsNetworkFoundationsQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+      // Pinned, never inferred. The CDK defaults to three availability zones, and it creates
+      // one NAT Gateway per zone — see the next property for what that costs.
+      maxAzs: MODULE_1_NETWORK.azCount,
+
+      /**
+       * The most expensive line in this module, stated as a number rather than inherited.
+       *
+       * A NAT Gateway costs $0.045/hour just to exist — about $32/month — plus $0.045/GB
+       * processed. The default is one per availability zone, so `new ec2.Vpc(this, 'Vpc')`
+       * with no arguments provisions three: roughly $96/month, from a line of code containing
+       * no numbers at all. Writing less code is what makes it expensive.
+       *
+       * What one NAT Gateway gives up, and both are real:
+       *
+       *   - Availability-zone fault isolation for egress. The NAT sits in one zone. If that
+       *     zone fails, the private subnet in the healthy zone also loses outbound internet,
+       *     because its route still points at a gateway that is gone. Two AZs with one NAT is
+       *     not two-AZ for egress.
+       *   - Free intra-AZ egress. Traffic from the zone without the NAT crosses zones to reach
+       *     it, adding $0.01/GB in each direction on top of the NAT's own processing charge.
+       *     Past enough volume the cheap NAT is the expensive one.
+       *
+       * One is right for infrastructure that is deployed, measured and destroyed the same day.
+       * Production traffic gets one per zone. See
+       * docs/adr/0006-single-nat-gateway-by-default.md.
+       */
+      natGateways: props?.natGateways ?? MODULE_1_NETWORK.natGateways,
+
+      /**
+       * Both already default to true, so these two lines change nothing that CloudFormation
+       * will see. They are here because a default cannot defend itself.
+       *
+       * Private DNS on VPC interface endpoints requires both enabled — that mechanism is what
+       * lets an endpoint take over a service's normal DNS name inside the VPC, which is the
+       * whole premise of module 4. Nothing in this layer depends on them, so they look inert
+       * and get switched off by someone tightening configuration. The cost of that is a
+       * silent one: the endpoint still creates successfully, resolution simply does not
+       * happen, and the symptom shows up modules away from the cause.
+       *
+       * See docs/adr/0009-declare-dns-support-explicitly.md.
+       */
+      enableDnsHostnames: true,
+      enableDnsSupport: true,
+
+      subnetConfiguration: [
+        {
+          name: 'Public',
+          subnetType: ec2.SubnetType.PUBLIC,
+
+          /**
+           * A /24 yields 251 usable addresses, not 256. AWS reserves five in every subnet
+           * regardless of size: the network address, the VPC router, DNS, one held for future
+           * use, and broadcast — reserved even though AWS does not support broadcast. The same
+           * five are why a /28 gives 11 usable and not 16.
+           *
+           * The console wizard defaults to /20, which is 4091 usable addresses for a network
+           * running a handful of instances. The waste is not the problem; the problem is that
+           * a subnet's CIDR is immutable once created, so the cost of being wrong is
+           * recreating the subnet and everything running in it. A /16 cut into /24s leaves 252
+           * slots free, which keeps that possibility remote.
+           *
+           * See docs/adr/0007-slash-24-subnet-mask.md.
+           */
+          cidrMask: MODULE_1_NETWORK.subnetCidrMask,
+        },
+        {
+          name: 'Private',
+
+          /**
+           * WITH_EGRESS, not ISOLATED: instances install packages during user data and need a
+           * default route to the NAT.
+           *
+           * The cost of getting this wrong is paid in diagnosis time. PRIVATE_ISOLATED has no
+           * egress at all, so user data hangs, the instance never reports healthy, the auto
+           * scaling group loops terminating newborn instances — and nothing in any error
+           * message mentions the subnet.
+           */
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+          cidrMask: MODULE_1_NETWORK.subnetCidrMask,
+        },
+      ],
+
+      /**
+       * Free, and the difference between zero and a real number.
+       *
+       * Without it, S3 traffic from a private subnet leaves through the NAT Gateway and is
+       * billed at $0.045/GB of data processing, in both directions. The endpoint adds a route
+       * that reaches S3 over the AWS network instead, with no hourly charge and no per-GB
+       * charge:
+       *
+       *     100 GB to S3    $4.50 through the NAT     $0.00 through the endpoint
+       *       1 TB to S3     ~$46 through the NAT     $0.00 through the endpoint
+       *
+       * The caveat belongs next to the numbers: this removes the data charge, not the NAT's
+       * ~$32/month existence charge. The NAT is still required for everything that is not S3
+       * or DynamoDB — the package installs above, OS updates, third-party APIs. The endpoint
+       * narrows what flows through the NAT; it does not remove it.
+       *
+       * See docs/adr/0008-s3-gateway-endpoint.md.
+       */
+      gatewayEndpoints: {
+        S3: { service: ec2.GatewayVpcEndpointAwsService.S3 },
+      },
+    });
   }
 }
