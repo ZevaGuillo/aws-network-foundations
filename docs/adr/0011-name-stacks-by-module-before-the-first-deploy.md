@@ -1,7 +1,14 @@
 # 0011 — Name stacks by module, before the first deploy
 
-**Status:** Accepted
+**Status:** Accepted — naming scheme superseded in part by [ADR-0014](0014-one-stack-per-module.md)
 **Date:** 2026-09-13
+
+> The deadline this record establishes stands: a stack name is decided before the first deploy,
+> never after. What changed is the shape of the name. This record prescribed
+> `Net-M<module>-<layer>` on the assumption that layers might become separate stacks;
+> [ADR-0014](0014-one-stack-per-module.md) decided they do not, so the name stops at the module
+> and this stack is `Net-M1` rather than `Net-M1-Base`. The scheme below is left as written
+> because the sequence is the history of the project.
 
 ## Context
 

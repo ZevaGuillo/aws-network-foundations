@@ -11,12 +11,17 @@ const app = new cdk.App();
  * changed later: renaming a deployed stack does not rename it, it creates a second one and
  * leaves the first behind holding every resource.
  *
- * `Net-M1-Base` names the module rather than the repository, because the repository will hold
- * five of these and `AwsNetworkFoundationsStack` would not distinguish any of them.
+ * `Net-M1` names the module rather than the repository, because the repository will hold five
+ * of these and `AwsNetworkFoundationsStack` would not distinguish any of them.
  *
- * See docs/adr/0011-name-stacks-by-module-before-the-first-deploy.md.
+ * The name stops at the module and does not continue into the layer. All five of module 1's
+ * layers deploy into this one stack, so a `-Base` suffix would have been false from the moment
+ * layer 2 landed — and by then it would have been permanent.
+ *
+ * See docs/adr/0014-one-stack-per-module.md, and
+ * docs/adr/0011-name-stacks-by-module-before-the-first-deploy.md for the deadline itself.
  */
-new Module1BaseNetworkStack(app, 'Net-M1-Base', {
+new Module1BaseNetworkStack(app, 'Net-M1', {
   /**
    * The account and region this stack is specialized for, read from the credentials the CDK
    * CLI resolved rather than written here.

@@ -27,6 +27,7 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0008](0008-s3-gateway-endpoint.md) | Put the S3 gateway endpoint in the base network | Accepted | 2026-09-13 |
 | [0009](0009-declare-dns-support-explicitly.md) | Declare DNS support explicitly | Accepted | 2026-09-13 |
 | [0010](0010-resolve-the-deployment-environment-from-the-cli.md) | Resolve the deployment environment from the CLI, and fail without it | Accepted | 2026-09-13 |
-| [0011](0011-name-stacks-by-module-before-the-first-deploy.md) | Name stacks by module, before the first deploy | Accepted | 2026-09-13 |
+| [0011](0011-name-stacks-by-module-before-the-first-deploy.md) | Name stacks by module, before the first deploy | Accepted (naming scheme superseded by 0014) | 2026-09-13 |
 | [0012](0012-never-auto-assign-public-ipv4-addresses.md) | Never auto-assign public IPv4 addresses | Accepted | 2026-09-13 |
 | [0013](0013-refuse-to-install-on-an-unsupported-node-version.md) | Refuse to install on an unsupported Node version | Accepted | 2026-09-13 |
+| [0014](0014-one-stack-per-module.md) | One stack per module | Accepted | 2026-09-13 |

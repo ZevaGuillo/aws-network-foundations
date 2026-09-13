@@ -50,7 +50,7 @@ npm test                 # 13 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
-Reading `cdk.out/Net-M1-Base.template.json` after a synth is the fastest way to
+Reading `cdk.out/Net-M1.template.json` after a synth is the fastest way to
 understand what the CDK actually does: roughly 140 lines of TypeScript become roughly 400 lines
 of CloudFormation.
 
