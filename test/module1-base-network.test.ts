@@ -11,6 +11,26 @@ import { IPV4_ADDRESS_PLAN, MODULE_1_NETWORK } from '../lib/config';
  * intentional address collision can be "corrected" without anything turning red.
  */
 
+/**
+ * Synthesizes the stack **environment-agnostic**, which is the mode
+ * docs/adr/0010-resolve-the-deployment-environment-from-the-cli.md exists to prevent. The
+ * deliberate exception is worth stating, because it is the first thing to look wrong here.
+ *
+ * No `env` is passed, so `resolveEnvironment` is never called and availability zones render as
+ * `Fn::Select[n, Fn::GetAZs '']` rather than `us-east-1a` and `us-east-1b`. That is on purpose:
+ * a test suite that required credentials would be a test suite most readers cannot run, and
+ * ADR-0010's argument is about what gets *deployed*, not about what gets asserted.
+ *
+ * It is safe only because no assertion below depends on a concrete zone. They count subnets,
+ * match CIDR masks, follow route tables and compare configuration values — all of which are
+ * identical in both modes.
+ *
+ * **The day one does depend on a zone, this helper has to take a fixed test environment**
+ * (`env: { account: '123456789012', region: 'us-east-1' }`), because an `Fn::GetAZs` token
+ * cannot be asserted against. The same applies to anything region-dependent: see the service
+ * name in the S3 endpoint test, which is an `Fn::Join` here and a plain string once an
+ * environment is pinned.
+ */
 function synth(props?: ConstructorParameters<typeof Module1BaseNetworkStack>[2]): Template {
   const app = new cdk.App();
   return Template.fromStack(new Module1BaseNetworkStack(app, 'TestStack', props));
@@ -32,6 +52,22 @@ function subnetsRoutedThrough(template: Template, target: 'GatewayId' | 'NatGate
   return Object.values(template.findResources('AWS::EC2::SubnetRouteTableAssociation'))
     .filter((a) => routeTableIds.includes(a.Properties.RouteTableId.Ref))
     .map((a) => a.Properties.SubnetId.Ref);
+}
+
+/**
+ * A VPC endpoint's service name in a form that can be asserted in either synthesis mode.
+ *
+ * The name embeds the region, so the CDK renders it as `com.amazonaws.<region>.s3` — an
+ * `Fn::Join` around `AWS::Region` while the stack is environment-agnostic, a plain string once
+ * an environment is pinned. Joining the literal fragments and ignoring the token leaves the
+ * service suffix intact in both, which is the part ADR-0008 is about.
+ */
+function serviceNameOf(endpoint: { [key: string]: any }): string {
+  const name: unknown = endpoint.Properties.ServiceName;
+  if (typeof name === 'string') return name;
+
+  const [, fragments] = (name as { 'Fn::Join': [string, unknown[]] })['Fn::Join'];
+  return fragments.filter((fragment): fragment is string => typeof fragment === 'string').join('');
 }
 
 describe('base network', () => {
@@ -83,12 +119,19 @@ describe('base network', () => {
     }
   });
 
-  test('reaches S3 through a free gateway endpoint rather than the NAT Gateway', () => {
+  test('reaches S3 — not merely some service — through a free gateway endpoint', () => {
     // Without this the same traffic is billed at $0.045/GB of NAT data processing.
     // docs/adr/0008-s3-gateway-endpoint.md
-    synth().hasResourceProperties('AWS::EC2::VPCEndpoint', {
-      VpcEndpointType: 'Gateway',
-    });
+    //
+    // The service is asserted, not just the endpoint type. Gateway endpoints exist for exactly
+    // two services, and an assertion that only reads `VpcEndpointType: 'Gateway'` stays green
+    // if S3 is swapped for DynamoDB — verified by mutation. ADR-0008 argues about S3 traffic
+    // with S3 figures, so S3 is what the test has to name.
+    const endpoints = Object.values(synth().findResources('AWS::EC2::VPCEndpoint'));
+
+    expect(endpoints).toHaveLength(1);
+    expect(endpoints[0].Properties.VpcEndpointType).toBe('Gateway');
+    expect(serviceNameOf(endpoints[0])).toMatch(/\.s3$/);
   });
 });
 

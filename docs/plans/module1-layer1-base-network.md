@@ -142,6 +142,34 @@ literal was confirmed to turn the suite red, and the change was reverted. A test
 fail protects nothing, and this one is written as an identity check, so verifying it was not
 optional.
 
+### The exception these tests take to ADR-0010
+
+`synth()` builds the stack with no `env`, so `resolveEnvironment` never runs and the suite
+synthesizes in exactly the environment-agnostic mode
+[ADR-0010](../adr/0010-resolve-the-deployment-environment-from-the-cli.md) exists to prevent.
+Zones come out as `Fn::Select[n, Fn::GetAZs '']` rather than `us-east-1a` and `us-east-1b`.
+
+That is deliberate and worth stating, because it is the first thing that looks wrong to anyone
+who has just read `environment.ts`. A suite that required credentials is a suite most readers
+cannot run, and ADR-0010 argues about what gets deployed, not about what gets asserted. It is
+safe only because no assertion depends on a concrete zone — they count subnets, match masks,
+follow route tables and compare configuration values, all identical in both modes.
+
+The limit is now written into the helper: the first assertion that does depend on a zone has to
+pass a fixed test environment, because an `Fn::GetAZs` token cannot be asserted against.
+
+### The assertion that was asserting almost nothing
+
+The S3 gateway endpoint test read `VpcEndpointType: 'Gateway'` and nothing else. Gateway
+endpoints exist for two services, so replacing S3 with DynamoDB left the suite green — verified
+by mutation — while [ADR-0008](../adr/0008-s3-gateway-endpoint.md) argues the case entirely in
+S3 traffic and S3 figures. The test now names the service.
+
+Reading it required a helper. The service name embeds the region, so it renders as an `Fn::Join`
+around `AWS::Region` under the environment-agnostic synthesis above and as a plain string once
+an environment is pinned; `serviceNameOf` flattens both to the suffix that matters. The mutation
+now fails with `"com.amazonaws..dynamodb"` against `/\.s3$/`.
+
 ### The assertion that had to be rewritten
 
 The public-subnet count identified its subjects by filtering on `MapPublicIpOnLaunch`, which is
