@@ -1,6 +1,6 @@
 # Implementation Plan — Module 1, Layer 2: Security Groups
 
-**Status:** planned
+**Status:** implemented
 **Scope:** `lib/module1-security-groups.ts` + its assertions, wired into the module 1 stack
 **Date:** 2026-09-13
 
@@ -183,7 +183,7 @@ does.
 
 ---
 
-## 5. Verification
+## 5. The assertions, and what each one catches
 
 Six assertions. Each one guards something that fails without producing an error.
 
@@ -222,16 +222,49 @@ been verified.
 
 ---
 
-## 6. The records this layer produces
+## 6. Verification — done
 
-| ADR | Decision |
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — 19 passed, six of them new.
+
+Every new assertion was mutation-tested, and each mutation was reverted:
+
+| Mutation | Result |
 |---|---|
-| 0015 | Security groups reference each other by identity, never by CIDR — and each tier trusts its balancer, not the tier before it |
-| 0016 | Ingress-only rules while `allowAllOutbound` stays true; egress hardening deferred to module 4 |
+| `backend` trusts `frontend` instead of `internalAlb` | the wiring assertion fails |
+| the SSH rule into `frontend` is deleted | the rule-count and wiring assertions fail |
+| `internalAlb` accepts `Peer.anyIpv4()` | the CIDR, rule-count and wiring assertions all fail |
+| an `addEgressRule` call is added | **only** the warning assertion fails — the trap, caught |
+
+The last row is the one that mattered. It is also the narrowest: the egress trap has exactly
+one detector, and the mutation confirms that detector is the one that fires.
+
+### What the guard did not catch
+
+Writing this layer produced a real defect that the suite stayed green through. Em dashes in the
+five `GroupDescription` strings violate the field's allowed character pattern, and
+CloudFormation's template validation reported it at synth time as
+`GroupDescription ... does not match pattern (CloudFormation Validate)`.
+
+Because `cdk.json` sets `@aws-cdk/core:validateAgainstDefaultRules`, that is an error rather
+than a warning in the real app, and `cdk synth` would have failed. Descriptions now use colons.
+
+Worth recording because it was checked rather than assumed: these findings travel a separate
+channel and **never reach `Annotations.fromStack`**, so assertion 6 was blind to them. The two
+guards are complementary — the suite watches annotations, synthesis watches the schema — and
+neither substitutes for running both.
 
 ---
 
-## 7. Open questions, carried not buried
+## 7. The records this layer produced
+
+| ADR | Decision |
+|---|---|
+| [0015](../adr/0015-reference-security-groups-by-identity.md) | Security groups reference each other by identity, never by CIDR — and each tier trusts its balancer, not the tier before it |
+| [0016](../adr/0016-ingress-only-while-egress-stays-open.md) | Ingress-only rules while `allowAllOutbound` stays true; egress hardening deferred to module 4 |
+
+---
+
+## 8. Open questions, carried not buried
 
 | Question | Why it is not answered here |
 |---|---|

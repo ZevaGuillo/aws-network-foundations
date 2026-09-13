@@ -2,8 +2,9 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 import { MODULE_1_NETWORK } from './config';
+import { SecurityGroups } from './module1-security-groups';
 
-export interface Module1BaseNetworkStackProps extends cdk.StackProps {
+export interface Module1StackProps extends cdk.StackProps {
   /**
    * Number of NAT Gateways. Defaults to MODULE_1_NETWORK.natGateways.
    *
@@ -15,20 +16,28 @@ export interface Module1BaseNetworkStackProps extends cdk.StackProps {
 }
 
 /**
- * Module 1, layer 1 — the base network.
+ * Module 1 — the whole module, in one stack.
  *
- * A VPC across two availability zones with public and private subnets, the private ones
- * carrying egress so instances can install packages at boot.
+ * Layer 1 is the base network: a VPC across two availability zones with public and private
+ * subnets, the private ones carrying egress so instances can install packages at boot.
+ * Layer 2 is the trust chain: five security groups naming each other by identity.
+ *
+ * Layers 3 through 5 — load balancers, compute tiers, auto scaling — land here too. One stack
+ * per module, decided in docs/adr/0014-one-stack-per-module.md, which is also why the class is
+ * named for the module rather than for any one layer inside it.
  *
  * The decisions behind every value here are recorded in docs/adr/. Comments below state the
  * why and the cost at the point of use; the records hold the alternatives and the full
  * argument.
  */
-export class Module1BaseNetworkStack extends cdk.Stack {
+export class Module1Stack extends cdk.Stack {
   /** Consumed by module 1's later layers, and by modules 2 and 5. */
   public readonly vpc: ec2.Vpc;
 
-  constructor(scope: Construct, id: string, props?: Module1BaseNetworkStackProps) {
+  /** Consumed by layers 3 through 5, which attach balancers and instances to these groups. */
+  public readonly securityGroups: SecurityGroups;
+
+  constructor(scope: Construct, id: string, props?: Module1StackProps) {
     super(scope, id, props);
 
     this.vpc = new ec2.Vpc(this, 'Vpc', {
@@ -161,5 +170,18 @@ export class Module1BaseNetworkStack extends cdk.Stack {
         S3: { service: ec2.GatewayVpcEndpointAwsService.S3 },
       },
     });
+
+    /**
+     * Layer 2 — the trust chain.
+     *
+     * Five security groups and nothing attached to them yet. That is deliberate rather than
+     * incomplete: a rule names another *group*, never the balancer or instance that will wear
+     * it, so the entire chain can be stated now and layers 3 through 5 only have to attach.
+     * Defining each rule when its resource appears would make the chain a residue of creation
+     * order instead of a policy decided once.
+     *
+     * See docs/plans/module1-layer2-security-groups.md.
+     */
+    this.securityGroups = new SecurityGroups(this, 'SecurityGroups', { vpc: this.vpc });
   }
 }

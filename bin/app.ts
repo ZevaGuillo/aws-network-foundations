@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
-import { Module1BaseNetworkStack } from '../lib/module1-base-network-stack';
+import { Module1Stack } from '../lib/module1-stack';
 import { resolveEnvironment } from '../lib/environment';
 
 const app = new cdk.App();
@@ -21,7 +21,7 @@ const app = new cdk.App();
  * See docs/adr/0014-one-stack-per-module.md, and
  * docs/adr/0011-name-stacks-by-module-before-the-first-deploy.md for the deadline itself.
  */
-new Module1BaseNetworkStack(app, 'Net-M1', {
+new Module1Stack(app, 'Net-M1', {
   /**
    * The account and region this stack is specialized for, read from the credentials the CDK
    * CLI resolved rather than written here.

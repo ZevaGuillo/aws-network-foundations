@@ -11,7 +11,7 @@ ones that must be made before the first VPC exists, because they cannot be chang
 
 | Module | Scope | State |
 |---|---|---|
-| 1 | Base network — VPC, subnets, NAT, S3 gateway endpoint | **Layer 1 built** |
+| 1 | Base network, then the security groups over it | **Layers 1–2 built** |
 | 2 | — | Not started |
 | 3 | VPC peering across three VPCs, proving it is not transitive | Address range reserved |
 | 4 | PrivateLink between VPCs that cannot be peered | Address range reserved |
@@ -46,7 +46,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 13 assertions, no AWS account touched
+npm test                 # 19 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
@@ -94,6 +94,8 @@ S3 gateway endpoint carry no hourly charge.
 | `AWS::EC2::InternetGateway` | 1 | |
 | `AWS::EC2::RouteTable` | 4 | one per subnet |
 | `AWS::EC2::VPCEndpoint` | 1 | `Gateway` type, S3 — free, and keeps S3 traffic off the NAT |
+| `AWS::EC2::SecurityGroup` | 5 | the trust chain — only the external balancer accepts an address |
+| `AWS::EC2::SecurityGroupIngress` | 5 | the group-to-group rules; the sixth is inlined on the external balancer |
 
 ## Address plan
 
@@ -124,7 +126,8 @@ bin/app.ts    app entry point — resolves the account and region, names the sta
 lib/
   config.ts       the address plan, importing nothing from the CDK
   environment.ts  account and region resolution, with a guard
-  module1-base-network-stack.ts  the VPC: subnets, NAT, S3 gateway endpoint
+  module1-stack.ts           the whole module: one stack, every layer
+  module1-security-groups.ts the trust chain: five groups, six rules
 test/         assertions against the synthesized template
 docs/
   adr/        one record per decision, Nygard format

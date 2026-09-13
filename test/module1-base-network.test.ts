@@ -1,7 +1,6 @@
-import * as cdk from 'aws-cdk-lib/core';
 import { Template } from 'aws-cdk-lib/assertions';
-import { Module1BaseNetworkStack } from '../lib/module1-base-network-stack';
 import { IPV4_ADDRESS_PLAN, MODULE_1_NETWORK } from '../lib/config';
+import { synth } from './support/synth';
 
 /**
  * These assertions guard the decisions in docs/adr/, not the CDK.
@@ -10,31 +9,6 @@ import { IPV4_ADDRESS_PLAN, MODULE_1_NETWORK } from '../lib/config';
  * costs money without erroring, a subnet mask cannot be changed after deployment, and the
  * intentional address collision can be "corrected" without anything turning red.
  */
-
-/**
- * Synthesizes the stack **environment-agnostic**, which is the mode
- * docs/adr/0010-resolve-the-deployment-environment-from-the-cli.md exists to prevent. The
- * deliberate exception is worth stating, because it is the first thing to look wrong here.
- *
- * No `env` is passed, so `resolveEnvironment` is never called and availability zones render as
- * `Fn::Select[n, Fn::GetAZs '']` rather than `us-east-1a` and `us-east-1b`. That is on purpose:
- * a test suite that required credentials would be a test suite most readers cannot run, and
- * ADR-0010's argument is about what gets *deployed*, not about what gets asserted.
- *
- * It is safe only because no assertion below depends on a concrete zone. They count subnets,
- * match CIDR masks, follow route tables and compare configuration values — all of which are
- * identical in both modes.
- *
- * **The day one does depend on a zone, this helper has to take a fixed test environment**
- * (`env: { account: '123456789012', region: 'us-east-1' }`), because an `Fn::GetAZs` token
- * cannot be asserted against. The same applies to anything region-dependent: see the service
- * name in the S3 endpoint test, which is an `Fn::Join` here and a plain string once an
- * environment is pinned.
- */
-function synth(props?: ConstructorParameters<typeof Module1BaseNetworkStack>[2]): Template {
-  const app = new cdk.App();
-  return Template.fromStack(new Module1BaseNetworkStack(app, 'TestStack', props));
-}
 
 /**
  * The subnets whose default route leaves through a given kind of target.
@@ -75,7 +49,7 @@ describe('base network', () => {
     // DNS is asserted because module 4's private endpoint DNS depends on it, and nothing in
     // this stack would fail if it were switched off.
     // docs/adr/0009-declare-dns-support-explicitly.md
-    synth().hasResourceProperties('AWS::EC2::VPC', {
+    synth().template.hasResourceProperties('AWS::EC2::VPC', {
       CidrBlock: IPV4_ADDRESS_PLAN.module1.baseNetwork,
       EnableDnsHostnames: true,
       EnableDnsSupport: true,
@@ -85,7 +59,7 @@ describe('base network', () => {
   test('provisions four /24 subnets, two public and two private', () => {
     // The mask is immutable after creation, so a drift here is only fixable by replacing the
     // subnet and everything in it. docs/adr/0007-slash-24-subnet-mask.md
-    const template = synth();
+    const { template } = synth();
     const subnets = Object.values(template.findResources('AWS::EC2::Subnet'));
 
     expect(subnets).toHaveLength(4);
@@ -112,7 +86,7 @@ describe('base network', () => {
     // Public subnets default to true, so an instance landing in the wrong subnet group would
     // be addressable from the internet without a line of code asking for it.
     // docs/adr/0012-never-auto-assign-public-ipv4-addresses.md
-    const subnets = Object.values(synth().findResources('AWS::EC2::Subnet'));
+    const subnets = Object.values(synth().template.findResources('AWS::EC2::Subnet'));
 
     for (const subnet of subnets) {
       expect(subnet.Properties.MapPublicIpOnLaunch).toBe(false);
@@ -127,7 +101,7 @@ describe('base network', () => {
     // two services, and an assertion that only reads `VpcEndpointType: 'Gateway'` stays green
     // if S3 is swapped for DynamoDB — verified by mutation. ADR-0008 argues about S3 traffic
     // with S3 figures, so S3 is what the test has to name.
-    const endpoints = Object.values(synth().findResources('AWS::EC2::VPCEndpoint'));
+    const endpoints = Object.values(synth().template.findResources('AWS::EC2::VPCEndpoint'));
 
     expect(endpoints).toHaveLength(1);
     expect(endpoints[0].Properties.VpcEndpointType).toBe('Gateway');
@@ -140,14 +114,14 @@ describe('NAT Gateway count', () => {
   // with no numbers in it. docs/adr/0006-single-nat-gateway-by-default.md
 
   test('defaults to one, with one Elastic IP to reclaim after teardown', () => {
-    const template = synth();
+    const { template } = synth();
 
     template.resourceCountIs('AWS::EC2::NatGateway', MODULE_1_NETWORK.natGateways);
     template.resourceCountIs('AWS::EC2::EIP', MODULE_1_NETWORK.natGateways);
   });
 
   test('honours an explicit override for deployments that need per-AZ egress', () => {
-    synth({ natGateways: 2 }).resourceCountIs('AWS::EC2::NatGateway', 2);
+    synth({ natGateways: 2 }).template.resourceCountIs('AWS::EC2::NatGateway', 2);
   });
 });
 
