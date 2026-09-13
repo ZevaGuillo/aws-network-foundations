@@ -6,3 +6,9 @@ node_modules
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# Agent tooling that is generated, not authored.
+# .claude/skills/* are absolute symlinks into .agents/skills/*; .atl/ is a
+# regenerated registry cache. Both are reproducible from skills-lock.json.
+.atl/
+.claude/skills/

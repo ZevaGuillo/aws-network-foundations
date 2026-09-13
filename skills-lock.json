@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "aws-cdk": {
+      "source": "aws/agent-toolkit-for-aws",
+      "sourceType": "github",
+      "skillPath": "skills/core-skills/aws-cdk/SKILL.md",
+      "computedHash": "0e496aefe35dc69048dcbff48b3677fa80ef290e7f7837fec4bd647af83a1ec4"
+    },
+    "cdk-patterns": {
+      "source": "sickn33/agentic-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/cdk-patterns/SKILL.md",
+      "computedHash": "45fa96294f888eaca2ae2eaf4d7cdfb8c20e2fe22663a4caca5335102ee01ed9"
+    }
+  }
+}
