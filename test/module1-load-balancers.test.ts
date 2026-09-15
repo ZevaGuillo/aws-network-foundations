@@ -161,11 +161,18 @@ describe('the balancers', () => {
 });
 
 describe('the target groups', () => {
-  test('are two, empty, and say what they will hold', () => {
+  test('are two, and say what they hold', () => {
     /**
-     * `targetType` is explicit because the groups are empty until layer 5, and an empty target
+     * `targetType` is explicit, and it had to be before anything was registered: an empty target
      * group without it raises a CDK warning that the ADR-0016 assertion fails the suite over.
-     * Probed both directions against 2.269.0: one warning without, none with.
+     * Probed both directions against 2.269.0 — one warning without, none with.
+     *
+     * This test used to assert `Targets` was undefined, because layer 3's plan said the groups
+     * stayed empty until layer 5. Layer 4 moved that boundary: a launch template nothing launches
+     * from has no boot time to measure, so it registers one instance per tier. The clause was
+     * removed rather than loosened, and what is registered is asserted in the layer 4 suite where
+     * the instances are built. The `targetType` clause is the part that was load-bearing, and it
+     * stays.
      */
     const { template } = synth();
 
@@ -175,7 +182,6 @@ describe('the target groups', () => {
       template.findResources('AWS::ElasticLoadBalancingV2::TargetGroup'),
     )) {
       expect(group.Properties.TargetType).toBe('instance');
-      expect(group.Properties.Targets).toBeUndefined();
       expect(group.Properties.Port).toBe(PORTS.frontend);
       expect(group.Properties.Protocol).toBe('HTTP');
     }

@@ -1,6 +1,6 @@
 # Implementation Plan — Module 1, Layer 4: The Application
 
-**Status:** planned
+**Status:** implemented
 **Scope:** `lib/module1-compute.ts` + `lib/app/` + its assertions, wired into the module 1 stack
 **Date:** 2026-09-14
 
@@ -378,7 +378,77 @@ than either deployment on its own — which is the whole reason both runtimes sh
 
 ---
 
-## 12. The records this layer produced
+## 12. Verification — done
+
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — **52 passed**, up from 34.
+
+The Node application was **run locally** before anything was deployed, which is the argument in
+§2 for keeping it in a real file: both tiers started, `/health` answered on each, `/health/deep`
+crossed from one to the other and returned `"reached": true` with an `elapsed_ms`, the backend
+returned 501 on the deep route, and the missing-environment guard exited with its message.
+
+`lib/app/server.py` was **not** executed. There is no Python interpreter on the machine this was
+written on — only the Windows Store stub — so it is verified by review and by its assertions and
+nothing else. That is a real gap: it is the default runtime, and a syntax error in it would
+surface as an instance that boots cleanly and serves nothing. It has to be run before the first
+deploy.
+
+### The boot script measured against the limit
+
+| Launch template | User data, raw |
+|---|---|
+| frontend | 5923 bytes |
+| backend | 5881 bytes |
+
+Against 16384. §5 claimed "nowhere near it" and this is the number behind the claim: roughly a
+third used, with the application itself being most of it.
+
+### The mutations
+
+Eleven, each reverted, each seen to fail exactly the assertion meant to catch it:
+
+| Mutation | Result |
+|---|---|
+| `BIND_ADDRESS` becomes the loopback address | the source-file assertion fails |
+| `requireImdsv2` removed | the IMDSv2 assertion fails |
+| a second managed policy on the role | the role assertion fails |
+| `preserveClientIp: true` | the endpoint assertion fails |
+| the server appended as the last boot command | the systemd assertion fails |
+| the frontend target group given the backend instance | the registration assertion fails |
+| the python path given an install command | the runtime assertion fails |
+| the backend given a `BACKEND_URL` | the dependency-direction assertion fails |
+| the python app retypes its port | the port assertion fails |
+| an external dependency added to the node app | the standard library assertion fails |
+| the frontend template wears the backend's group | the launch template assertion fails |
+
+### Two assertions were wrong before the code was
+
+Both failed on first run for reasons that were the test's fault, and both are worth recording
+because the fix made them sharper.
+
+The dependency-direction assertion checked the backend's boot script did not contain
+`BACKEND_URL=`. It does — the **application source is embedded in the script**, and its own
+docstring shows a local run with that variable set. The assertion now checks the systemd
+`Environment=BACKEND_URL=` line, which is the thing that actually decides behaviour.
+
+The standard library assertion pattern-matched for imports that "looked external" and passed
+`require('http')` as external. It now extracts every imported name and compares it against an
+allowlist, so adding an import is a deliberate edit in two places.
+
+### What layer 3's suite caught
+
+One assertion in `test/module1-load-balancers.test.ts` asserted `Targets` was undefined, because
+layer 3's plan said the target groups stayed empty until layer 5. §1 moved that boundary, and the
+assertion went red on the first run of this layer — which is the third time a guard from an
+earlier layer has caught a consequence of a later one.
+
+The clause was **removed rather than loosened**, and what is registered is now asserted in this
+layer's suite where the instances are built. The `targetType` clause in that test was the
+load-bearing part and it stays.
+
+---
+
+## 13. The records this layer produced
 
 | ADR | Decision |
 |---|---|
@@ -395,7 +465,7 @@ what changes is what `/health/deep` is understood to be measuring.
 
 ---
 
-## 13. Open questions, carried not buried
+## 14. Open questions, carried not buried
 
 | Question | Why it is not answered here |
 |---|---|

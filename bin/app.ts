@@ -1,9 +1,32 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
 import { Module1Stack } from '../lib/module1-stack';
+import { Runtime } from '../lib/module1-compute';
 import { resolveEnvironment } from '../lib/environment';
 
 const app = new cdk.App();
+
+/**
+ * `npx cdk deploy -c runtime=node`, and nothing else reads context in this repository.
+ *
+ * The runtime is the one value that has to change between two deployments of the same stack,
+ * because the difference between them is what layer 4 measures
+ * (docs/adr/0025-the-runtime-is-a-deployment-property.md). Everything else that varies is a
+ * stack property set in code, and this is a stack property too — context is only how the value
+ * reaches it from a command line.
+ *
+ * Unrecognised values throw rather than falling back. A typo that silently deployed Python
+ * while the operator believed they were timing Node would corrupt the only number this layer
+ * produces, and nothing about the deployment would look wrong.
+ */
+function runtimeFromContext(): Runtime | undefined {
+  const value = app.node.tryGetContext('runtime');
+
+  if (value === undefined) return undefined;
+  if (value === 'python' || value === 'node') return value;
+
+  throw new Error(`Unknown runtime "${value}". Use -c runtime=python or -c runtime=node.`);
+}
 
 /**
  * The second argument is the construct id, and for a stack directly under the app it becomes
@@ -37,4 +60,7 @@ new Module1Stack(app, 'Net-M1', {
    * See docs/adr/0010-resolve-the-deployment-environment-from-the-cli.md.
    */
   env: resolveEnvironment(process.env),
+
+  /** Undefined means the stack's own default, which is Python. */
+  runtime: runtimeFromContext(),
 });

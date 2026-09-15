@@ -11,7 +11,7 @@ ones that must be made before the first VPC exists, because they cannot be chang
 
 | Module | Scope | State |
 |---|---|---|
-| 1 | Base network, the security groups over it, then the balancers | **Layers 1–3 built** |
+| 1 | Base network, the security groups, the balancers, then the application | **Layers 1–4 built** |
 | 2 | — | Not started |
 | 3 | VPC peering across three VPCs, proving it is not transitive | Address range reserved |
 | 4 | PrivateLink between VPCs that cannot be peered | Address range reserved |
@@ -46,7 +46,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 34 assertions, no AWS account touched
+npm test                 # 52 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
@@ -64,9 +64,10 @@ npx cdk deploy
 
 ## Cost
 
-> **Module 1 costs roughly $65/month sitting completely idle.** One NAT Gateway at about
-> $32/month and two Application Load Balancers at about $33/month for the pair, all billed by
-> the hour from creation, none of them needing a single packet to charge you.
+> **Module 1 costs roughly $80/month sitting completely idle.** One NAT Gateway at about
+> $32/month, two Application Load Balancers at about $33/month for the pair, and two `t3.micro`
+> instances at about $15/month for the pair — all billed by the hour from creation, none of them
+> needing a single packet to charge you.
 
 ```bash
 npx cdk destroy
@@ -81,12 +82,50 @@ Where the money goes, and what each number is a decision about:
 |---|---|---|
 | NAT Gateway × 1 | ~$32/month, plus $0.045/GB | The CDK's default is one per availability zone, which turns `new ec2.Vpc(this, 'Vpc')` into roughly $96/month from a line containing no numbers at all. What one gives up is a real trade — [ADR-0006](docs/adr/0006-single-nat-gateway-by-default.md) |
 | Application Load Balancer × 2 | ~$16.50/month each, plus LCUs | The internal one is half this bill and is not removable: a tier reachable only from inside the VPC is what module 1 exists to demonstrate, and one balancer cannot demonstrate it |
+| `t3.micro` × 2 | ~$7.50/month each | One instance per tier. Nothing here is under load, so the smallest thing that runs an HTTP server is the right size |
 
 Everything else in module 1 is free: the VPC, subnets, route tables, internet gateway, security
 groups, target groups and the S3 gateway endpoint carry no hourly charge.
 
-Layer 3 roughly doubled this figure, which is the reason the advice above is not a formality.
-Deploy it, look at it, destroy it.
+Layer 3 roughly doubled this figure and layer 4 added to it, which is the reason the advice above
+is not a formality. Deploy it, look at it, destroy it.
+
+## The runtime comparison
+
+Layer 4 ships two applications rather than one, because the difference between them is a number
+worth having rather than a preference worth arguing about. Amazon Linux 2023 ships Python and
+does not ship Node, so the Node path pays for a `dnf install` at every boot: time before an
+instance serves a request, and bytes through the NAT Gateway at $0.045/GB.
+
+```bash
+npx cdk deploy                             # Python, the default
+npx cdk deploy -c runtime=node             # the same stack, the other runtime
+```
+
+| Number | How it is taken |
+|---|---|
+| Launch to in-service | Poll `aws elbv2 describe-target-health` until the target reports `healthy`, timing from launch. This becomes layer 5's `estimatedInstanceWarmup` |
+| Where the time went | `cloud-init analyze blame` over Session Manager, which attributes boot time per module |
+| Bytes through the NAT | The NAT Gateway's `BytesOutToDestination` across the boot window |
+
+The table those produce is the output of layer 4. It is not filled in yet — see
+[the layer 4 plan](docs/plans/module1-layer4-application.md) for the procedure.
+
+## When something boots and serves nothing
+
+The instances have no public address, so none of this is reachable from the console. Session
+Manager is the way in, and the Instance Connect Endpoint is what layer 2's two SSH rules exist
+for.
+
+| Symptom | Look at |
+|---|---|
+| Target never turns healthy, instance is up | `/var/log/cloud-init-output.log` |
+| Boot slower than expected | `cloud-init analyze blame` |
+| Service not running | `systemctl status module1-app`, `journalctl -u module1-app` |
+
+The boot script fails without the instance failing. It boots, SSH works, and only the service is
+missing — which is why [ADR-0027](docs/adr/0027-user-data-terminates-systemd-owns-the-process.md)
+names these three rather than leaving them to be found.
 
 ## What gets deployed
 
@@ -103,7 +142,11 @@ Deploy it, look at it, destroy it.
 | `AWS::EC2::SecurityGroupIngress` | 5 | the group-to-group rules; the sixth is inlined on the external balancer |
 | `AWS::ElasticLoadBalancingV2::LoadBalancer` | 2 | one internet-facing in the public subnets, one internal in the private ones |
 | `AWS::ElasticLoadBalancingV2::Listener` | 2 | neither opens its own security group ([ADR-0021](docs/adr/0021-listeners-never-open-their-own-security-group.md)); the public one pins TLS 1.2 as its floor ([ADR-0022](docs/adr/0022-pin-the-tls-policy.md)) |
-| `AWS::ElasticLoadBalancingV2::TargetGroup` | 2 | empty until layer 5; every health check timing written out, none inherited |
+| `AWS::ElasticLoadBalancingV2::TargetGroup` | 2 | one instance each; every health check timing written out, none inherited |
+| `AWS::EC2::LaunchTemplate` | 2 | IMDSv2 required, which is not the CDK default |
+| `AWS::EC2::Instance` | 2 | one per tier, launched from the templates above; layer 5 replaces them with auto scaling groups |
+| `AWS::EC2::InstanceConnectEndpoint` | 1 | the only way into a private subnet, and it does not preserve the client IP |
+| `AWS::IAM::Role` | 1 | Session Manager and nothing else |
 
 ## Address plan
 
@@ -136,7 +179,11 @@ lib/
   environment.ts  account and region resolution, with a guard
   module1-stack.ts           the whole module: one stack, every layer
   module1-security-groups.ts the trust chain: five groups, six rules
-  module1-load-balancers.ts  two balancers, two listeners, two empty target groups
+  module1-load-balancers.ts  two balancers, two listeners, two target groups
+  module1-compute.ts         launch templates, the instance role, the way in
+  app/
+    server.py   the application, Python - runnable locally
+    server.js   the application, Node - the same program, for the comparison
 test/         assertions against the synthesized template
 docs/
   adr/        one record per decision, Nygard format

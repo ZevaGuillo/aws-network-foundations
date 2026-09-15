@@ -4,6 +4,7 @@ import { Construct } from 'constructs';
 import { MODULE_1_NETWORK } from './config';
 import { SecurityGroups, publicPort } from './module1-security-groups';
 import { LoadBalancers } from './module1-load-balancers';
+import { Compute, Runtime } from './module1-compute';
 
 export interface Module1StackProps extends cdk.StackProps {
   /**
@@ -27,6 +28,18 @@ export interface Module1StackProps extends cdk.StackProps {
    * See docs/adr/0018-the-certificate-is-optional.md.
    */
   readonly certificateArn?: string;
+
+  /**
+   * Which runtime the tiers run under. Defaults to Python.
+   *
+   * Third property on this stack, on the same rule as the other two: a value becomes a property
+   * when it changes what a given deployment *is*. This one is the layer 4 experiment — Amazon
+   * Linux 2023 ships Python and does not ship Node, so the same stack deployed twice produces two
+   * boot times, and the difference is the layer output rather than an estimate.
+   *
+   * See docs/adr/0025-the-runtime-is-a-deployment-property.md.
+   */
+  readonly runtime?: Runtime;
 }
 
 /**
@@ -35,10 +48,11 @@ export interface Module1StackProps extends cdk.StackProps {
  * Layer 1 is the base network: a VPC across two availability zones with public and private
  * subnets, the private ones carrying egress so instances can install packages at boot.
  * Layer 2 is the trust chain: five security groups naming each other by identity.
- * Layer 3 is the balancers: two Application Load Balancers and the target groups layer 5 fills.
+ * Layer 3 is the balancers: two Application Load Balancers and the target groups behind them.
+ * Layer 4 is the application: two launch templates, one instance per tier, and the way in.
  *
- * Layers 4 and 5 — the application, the compute tiers, auto scaling — land here too. One stack
- * per module, decided in docs/adr/0014-one-stack-per-module.md, which is also why the class is
+ * Layer 5 — auto scaling — lands here too. One stack per module, decided in
+ * docs/adr/0014-one-stack-per-module.md, which is also why the class is
  * named for the module rather than for any one layer inside it.
  *
  * The decisions behind every value here are recorded in docs/adr/. Comments below state the
@@ -52,8 +66,11 @@ export class Module1Stack extends cdk.Stack {
   /** Consumed by layers 3 through 5, which attach balancers and instances to these groups. */
   public readonly securityGroups: SecurityGroups;
 
-  /** Consumed by layer 5, which registers its auto scaling groups into the target groups. */
+  /** Consumed by layers 4 and 5, which register targets into its target groups. */
   public readonly loadBalancers: LoadBalancers;
+
+  /** Consumed by layer 5, which replaces the fixed instances with auto scaling groups. */
+  public readonly compute: Compute;
 
   constructor(scope: Construct, id: string, props?: Module1StackProps) {
     super(scope, id, props);
@@ -224,6 +241,27 @@ export class Module1Stack extends cdk.Stack {
       vpc: this.vpc,
       securityGroups: this.securityGroups,
       certificateArn: props?.certificateArn,
+    });
+
+    /**
+     * Layer 4 — the application.
+     *
+     * Two launch templates and one instance each, plus the Instance Connect Endpoint whose group
+     * layer 2 created two layers before anything wore it. The tiers register into the target
+     * groups layer 3 left empty.
+     *
+     * Two t3.micro instances add roughly $15/month to a module already at roughly $65. Small
+     * next to the balancers, and still a third line that costs money by existing.
+     *
+     * The output of this layer is not a resource. It is the difference in boot time between the
+     * two runtimes, measured rather than estimated, which becomes layer 5's warm-up figure. See
+     * docs/plans/module1-layer4-application.md section 11 for how the number is taken.
+     */
+    this.compute = new Compute(this, 'Compute', {
+      vpc: this.vpc,
+      securityGroups: this.securityGroups,
+      loadBalancers: this.loadBalancers,
+      runtime: props?.runtime,
     });
   }
 }
