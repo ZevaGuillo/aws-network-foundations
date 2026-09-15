@@ -37,3 +37,4 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0018](0018-the-certificate-is-optional.md) | The certificate is optional, and the public port is one decision | Accepted | 2026-09-14 |
 | [0019](0019-shallow-health-check-at-the-balancer.md) | The balancer's health check is shallow; the dependency check is a separate path | Accepted | 2026-09-14 |
 | [0020](0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare their target type | Accepted | 2026-09-14 |
+| [0021](0021-listeners-never-open-their-own-security-group.md) | Listeners never open their own security group | Accepted | 2026-09-14 |

@@ -2,7 +2,8 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 import { MODULE_1_NETWORK } from './config';
-import { SecurityGroups } from './module1-security-groups';
+import { SecurityGroups, publicPort } from './module1-security-groups';
+import { LoadBalancers } from './module1-load-balancers';
 
 export interface Module1StackProps extends cdk.StackProps {
   /**
@@ -13,6 +14,19 @@ export interface Module1StackProps extends cdk.StackProps {
    * it is reviewed once. See docs/adr/0006-single-nat-gateway-by-default.md.
    */
   readonly natGateways?: number;
+
+  /**
+   * ACM certificate ARN for the external listener. Absent - the default - means the external
+   * balancer listens on plain HTTP.
+   *
+   * The second property on this stack, and it earns the place on the same rule as the first: a
+   * value becomes a property when it changes what a given deployment *is*. This one decides
+   * whether the repository can be deployed at all by someone who owns no domain, which is what
+   * docs/adr/0002-self-contained-repository.md promised.
+   *
+   * See docs/adr/0018-the-certificate-is-optional.md.
+   */
+  readonly certificateArn?: string;
 }
 
 /**
@@ -21,8 +35,9 @@ export interface Module1StackProps extends cdk.StackProps {
  * Layer 1 is the base network: a VPC across two availability zones with public and private
  * subnets, the private ones carrying egress so instances can install packages at boot.
  * Layer 2 is the trust chain: five security groups naming each other by identity.
+ * Layer 3 is the balancers: two Application Load Balancers and the target groups layer 5 fills.
  *
- * Layers 3 through 5 — load balancers, compute tiers, auto scaling — land here too. One stack
+ * Layers 4 and 5 — the application, the compute tiers, auto scaling — land here too. One stack
  * per module, decided in docs/adr/0014-one-stack-per-module.md, which is also why the class is
  * named for the module rather than for any one layer inside it.
  *
@@ -36,6 +51,9 @@ export class Module1Stack extends cdk.Stack {
 
   /** Consumed by layers 3 through 5, which attach balancers and instances to these groups. */
   public readonly securityGroups: SecurityGroups;
+
+  /** Consumed by layer 5, which registers its auto scaling groups into the target groups. */
+  public readonly loadBalancers: LoadBalancers;
 
   constructor(scope: Construct, id: string, props?: Module1StackProps) {
     super(scope, id, props);
@@ -182,6 +200,30 @@ export class Module1Stack extends cdk.Stack {
      *
      * See docs/plans/module1-layer2-security-groups.md.
      */
-    this.securityGroups = new SecurityGroups(this, 'SecurityGroups', { vpc: this.vpc });
+    this.securityGroups = new SecurityGroups(this, 'SecurityGroups', {
+      vpc: this.vpc,
+      publicPort: publicPort(props?.certificateArn),
+    });
+
+    /**
+     * Layer 3 - the balancers.
+     *
+     * Two Application Load Balancers, and they are the most expensive thing in this module
+     * after the NAT Gateway. Roughly $0.0225/hour each, so about $33/month for the pair before
+     * a single request is served, on top of the NAT's ~$32. Module 1 sitting idle goes from
+     * roughly $32/month to roughly $65/month, and this layer is where that happens.
+     *
+     * The internal balancer is half of that and is not removable. A tier reachable only from
+     * inside the VPC is the thing module 1 exists to demonstrate, and one balancer cannot
+     * demonstrate it. The conclusion is the one the README already draws: deploy, measure,
+     * destroy - which this layer makes materially more expensive to ignore.
+     *
+     * The target groups it creates are empty. Layer 5 registers the auto scaling groups.
+     */
+    this.loadBalancers = new LoadBalancers(this, 'LoadBalancers', {
+      vpc: this.vpc,
+      securityGroups: this.securityGroups,
+      certificateArn: props?.certificateArn,
+    });
   }
 }

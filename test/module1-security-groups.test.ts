@@ -1,6 +1,9 @@
 import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
-import { PORTS } from '../lib/module1-security-groups';
+import { PORTS, publicPort } from '../lib/module1-security-groups';
 import { synth } from './support/synth';
+
+/** Any syntactically valid ACM ARN; nothing resolves it. See test/module1-load-balancers.test.ts. */
+const CERTIFICATE_ARN = 'arn:aws:acm:us-east-1:123456789012:certificate/11111111-2222-3333-4444-555555555555';
 
 /**
  * These assertions guard the trust chain, and every one of them exists because the thing it
@@ -53,26 +56,41 @@ describe('the trust chain', () => {
     });
   });
 
-  test('lets exactly one group accept an address, and only on HTTPS', () => {
-    // This is the premise of the whole layer. A second group accepting a CIDR is the chain
-    // quietly becoming address-based, and nothing anywhere fails.
-    const { template } = synth();
+  test.each([
+    ['without a certificate', undefined, PORTS.http],
+    ['with a certificate', CERTIFICATE_ARN, PORTS.https],
+  ])(
+    'lets exactly one group accept an address, %s',
+    (_name, certificateArn, expectedPort) => {
+      /**
+       * This is the premise of the whole layer. A second group accepting a CIDR is the chain
+       * quietly becoming address-based, and nothing anywhere fails.
+       *
+       * It runs in both certificate modes since layer 3, for two reasons. The port is no longer
+       * a constant — `publicPort()` derives it, and this rule is one of its two consumers
+       * (docs/adr/0018). And this is the assertion that catches a listener opening its own
+       * security group: `addListener` defaults `open` to true, which would put a second
+       * `0.0.0.0/0` rule on the internal balancer's group (docs/adr/0021).
+       */
+      const { template } = synth(certificateArn === undefined ? undefined : { certificateArn });
 
-    const withCidr = Object.values(template.findResources('AWS::EC2::SecurityGroup')).filter(
-      (group) => group.Properties.SecurityGroupIngress !== undefined,
-    );
+      const withCidr = Object.values(template.findResources('AWS::EC2::SecurityGroup')).filter(
+        (group) => group.Properties.SecurityGroupIngress !== undefined,
+      );
 
-    expect(withCidr).toHaveLength(1);
-    expect(withCidr[0].Properties.GroupDescription).toContain('External load balancer');
-    expect(withCidr[0].Properties.SecurityGroupIngress).toEqual([
-      expect.objectContaining({
-        CidrIp: '0.0.0.0/0',
-        IpProtocol: 'tcp',
-        FromPort: PORTS.public,
-        ToPort: PORTS.public,
-      }),
-    ]);
-  });
+      expect(withCidr).toHaveLength(1);
+      expect(withCidr[0].Properties.GroupDescription).toContain('External load balancer');
+      expect(withCidr[0].Properties.SecurityGroupIngress).toEqual([
+        expect.objectContaining({
+          CidrIp: '0.0.0.0/0',
+          IpProtocol: 'tcp',
+          FromPort: expectedPort,
+          ToPort: expectedPort,
+        }),
+      ]);
+      expect(expectedPort).toBe(publicPort(certificateArn));
+    },
+  );
 
   test('wires each tier to its balancer, not to the tier before it', () => {
     // The assertion that carries the reasoning. A backend trusting the frontend would deploy

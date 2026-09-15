@@ -15,18 +15,45 @@ import { Construct } from 'constructs';
  * whole reason it is a name and not an `80` typed into a rule.
  */
 export const PORTS = {
-  /** TLS terminates at the external balancer. */
-  public: 443,
+  /** TLS terminates at the external balancer, when there is a certificate to terminate it. */
+  https: 443,
+  /** The external balancer with no certificate. See `publicPort` below. */
+  http: 80,
   frontend: 8080,
-  /** Plaintext inside the VPC, for now. See docs/plans/module1-layer2-security-groups.md §7. */
+  /** The internal balancer's listener port. Plaintext inside the VPC, for now. */
   internal: 80,
   backend: 8080,
   ssh: 22,
 } as const;
 
+/**
+ * The port the external balancer listens on, and the port its security group accepts from the
+ * internet. One decision, two consumers, deliberately derived in a single place.
+ *
+ * They live in different files and different layers, and that is exactly how they drift apart.
+ * The drift is silent: `externalAlb` accepting only 443 while the listener binds 80 produces a
+ * listener that binds successfully and receives nothing at all, because the security group
+ * drops the packet first. Both resources deploy, synthesis is clean, the suite is green, and
+ * every request times out with no error naming either resource.
+ *
+ * A repeated ternary in two files is how that happens. A function called twice is how it does
+ * not. See docs/adr/0018-the-certificate-is-optional.md.
+ */
+export function publicPort(certificateArn?: string): number {
+  return certificateArn === undefined ? PORTS.http : PORTS.https;
+}
+
 export interface SecurityGroupsProps {
   /** The VPC these groups belong to. A security group cannot outlive or leave its VPC. */
   readonly vpc: ec2.IVpc;
+
+  /**
+   * The port `externalAlb` accepts from the internet, from `publicPort()`.
+   *
+   * Required rather than defaulted, and the chain does not read the certificate itself: this
+   * layer describes who may reach what, and it has no business knowing what a certificate is.
+   */
+  readonly publicPort: number;
 }
 
 /**
@@ -38,7 +65,7 @@ export interface SecurityGroupsProps {
  * describes the architecture instead of the addressing and stays true from two instances to
  * two hundred.
  *
- *       internet --443--> externalAlb      the only group that accepts a CIDR
+ *       internet --publicPort--> externalAlb   the only group that accepts a CIDR
  *                              |
  *                            8080
  *                              v
@@ -78,7 +105,7 @@ export class SecurityGroups extends Construct {
   constructor(scope: Construct, id: string, props: SecurityGroupsProps) {
     super(scope, id);
 
-    const { vpc } = props;
+    const { vpc, publicPort } = props;
 
     /**
      * `allowAllOutbound: true` is the CDK default, restated on every group below under the same
@@ -145,10 +172,13 @@ export class SecurityGroups extends Construct {
     // asserts the stack synthesizes with no warning annotations, which is the only way that
     // trap can be caught.
 
+    // The only rule in the chain naming a CIDR, because the internet has no group to name. Its
+    // port is whatever the external listener binds, and the two are the same decision: see
+    // `publicPort` above and docs/adr/0018-the-certificate-is-optional.md.
     this.externalAlb.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(PORTS.public),
-      'The internet, on HTTPS only',
+      ec2.Port.tcp(publicPort),
+      'The internet, on the external listener port',
     );
 
     this.frontend.addIngressRule(

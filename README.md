@@ -11,7 +11,7 @@ ones that must be made before the first VPC exists, because they cannot be chang
 
 | Module | Scope | State |
 |---|---|---|
-| 1 | Base network, then the security groups over it | **Layers 1–2 built** |
+| 1 | Base network, the security groups over it, then the balancers | **Layers 1–3 built** |
 | 2 | — | Not started |
 | 3 | VPC peering across three VPCs, proving it is not transitive | Address range reserved |
 | 4 | PrivateLink between VPCs that cannot be peered | Address range reserved |
@@ -46,12 +46,12 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 19 assertions, no AWS account touched
+npm test                 # 31 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
 Reading `cdk.out/Net-M1.template.json` after a synth is the fastest way to
-understand what the CDK actually does: roughly 140 lines of TypeScript become roughly 400 lines
+understand what the CDK actually does: roughly 250 lines of TypeScript become nearly 1000 lines
 of CloudFormation.
 
 To deploy, first bootstrap the account and region once — this creates the S3 bucket and IAM
@@ -64,8 +64,9 @@ npx cdk deploy
 
 ## Cost
 
-> **A deployed NAT Gateway costs about $32/month whether or not any traffic passes through it**
-> — $0.045/hour to exist, plus $0.045/GB processed. It is billed by the hour from creation.
+> **Module 1 costs roughly $65/month sitting completely idle.** One NAT Gateway at about
+> $32/month and two Application Load Balancers at about $33/month for the pair, all billed by
+> the hour from creation, none of them needing a single packet to charge you.
 
 ```bash
 npx cdk destroy
@@ -74,14 +75,18 @@ npx cdk destroy
 After destroying, check **EC2 → Elastic IPs** in the console. An unassociated Elastic IP is
 also billed, and orphaned addresses are the most common surprise on a teardown.
 
-The default here is one NAT Gateway rather than the CDK's one-per-availability-zone, which
-turns `new ec2.Vpc(this, 'Vpc')` into roughly $96/month from a line containing no numbers at
-all. What that default gives up is in
-[ADR-0006](docs/adr/0006-single-nat-gateway-by-default.md); it is a real trade, not a free
-saving.
+Where the money goes, and what each number is a decision about:
 
-Everything else in module 1 is free: the VPC, subnets, route tables, internet gateway and the
-S3 gateway endpoint carry no hourly charge.
+| Resource | Cost | Why this many |
+|---|---|---|
+| NAT Gateway × 1 | ~$32/month, plus $0.045/GB | The CDK's default is one per availability zone, which turns `new ec2.Vpc(this, 'Vpc')` into roughly $96/month from a line containing no numbers at all. What one gives up is a real trade — [ADR-0006](docs/adr/0006-single-nat-gateway-by-default.md) |
+| Application Load Balancer × 2 | ~$16.50/month each, plus LCUs | The internal one is half this bill and is not removable: a tier reachable only from inside the VPC is what module 1 exists to demonstrate, and one balancer cannot demonstrate it |
+
+Everything else in module 1 is free: the VPC, subnets, route tables, internet gateway, security
+groups, target groups and the S3 gateway endpoint carry no hourly charge.
+
+Layer 3 roughly doubled this figure, which is the reason the advice above is not a formality.
+Deploy it, look at it, destroy it.
 
 ## What gets deployed
 
@@ -96,6 +101,9 @@ S3 gateway endpoint carry no hourly charge.
 | `AWS::EC2::VPCEndpoint` | 1 | `Gateway` type, S3 — free, and keeps S3 traffic off the NAT |
 | `AWS::EC2::SecurityGroup` | 5 | the trust chain — only the external balancer accepts an address |
 | `AWS::EC2::SecurityGroupIngress` | 5 | the group-to-group rules; the sixth is inlined on the external balancer |
+| `AWS::ElasticLoadBalancingV2::LoadBalancer` | 2 | one internet-facing in the public subnets, one internal in the private ones |
+| `AWS::ElasticLoadBalancingV2::Listener` | 2 | neither opens its own security group — [ADR-0021](docs/adr/0021-listeners-never-open-their-own-security-group.md) |
+| `AWS::ElasticLoadBalancingV2::TargetGroup` | 2 | empty until layer 5; every health check timing written out, none inherited |
 
 ## Address plan
 
@@ -128,6 +136,7 @@ lib/
   environment.ts  account and region resolution, with a guard
   module1-stack.ts           the whole module: one stack, every layer
   module1-security-groups.ts the trust chain: five groups, six rules
+  module1-load-balancers.ts  two balancers, two listeners, two empty target groups
 test/         assertions against the synthesized template
 docs/
   adr/        one record per decision, Nygard format

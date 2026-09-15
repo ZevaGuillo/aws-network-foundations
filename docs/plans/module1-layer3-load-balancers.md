@@ -1,6 +1,6 @@
 # Implementation Plan — Module 1, Layer 3: Load Balancers
 
-**Status:** planned
+**Status:** implemented
 **Scope:** `lib/module1-load-balancers.ts` + its assertions, an amendment to layer 2, wired into
 the module 1 stack
 **Date:** 2026-09-14
@@ -74,7 +74,7 @@ times out.
 | `lib/module1-load-balancers.ts` | Two balancers, two listeners, two target groups, the health check contract, the timing constants |
 | `lib/module1-security-groups.ts` | **Amended** — `PORTS.public` splits into `https`/`http`, and the external rule takes its port from the certificate decision |
 | `lib/module1-stack.ts` | Gains a `certificateArn` property and instantiates the balancers |
-| `test/module1-load-balancers.test.ts` | The assertions in §7 |
+| `test/module1-load-balancers.test.ts` | The assertions in §8 |
 | `test/module1-security-groups.test.ts` | **Amended** — the external CIDR rule assertion now runs in both modes |
 | `README.md` | Status table, and the cost section, which this layer roughly doubles |
 
@@ -340,7 +340,57 @@ confirms which one fires.
 
 ---
 
-## 9. The records this layer produces
+## 9. Verification — done
+
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — **31 passed**, up from 19.
+Eleven assertions are new in `test/module1-load-balancers.test.ts`, and layer 2's premise
+assertion now runs twice because the public port is no longer a constant.
+
+Every assertion was mutation-tested, and each mutation was reverted:
+
+| Mutation | Result |
+|---|---|
+| the `healthCheck` block is deleted | the path and the timings assertions fail |
+| `deregistrationDelay` is deleted | **only** the timings assertion fails |
+| the listeners forward to each other's target groups | the forwarding assertion fails |
+| the internal balancer is created `internetFacing: true` | five fail, across the scheme, the subnets, the forwarding and both listener modes |
+| the public port drifts — the listener follows the certificate, the group does not | the HTTPS-mode assertion and **layer 2's premise assertion** both fail |
+| `targetType` is removed | three fail: both warning assertions and the target group assertion |
+| `open: false` is removed from the internal listener | **five** fail, including both modes of layer 2's premise assertion |
+
+Two rows deserve a note, because the plan predicted them narrower than they turned out.
+
+`targetType` was expected to trip only the warning assertion. It trips the target group
+assertion too, which asserts `TargetType` is `instance` rather than absent. Two detectors
+instead of one is a better outcome than the plan asked for, and the warning assertion is still
+the one that catches it stack-wide.
+
+The last row is the finding this layer did not see coming, and it became
+[ADR-0021](../adr/0021-listeners-never-open-their-own-security-group.md).
+
+### The trap this plan missed
+
+`addListener` defaults `open` to `true`, and that default calls
+`allowDefaultPortFrom(Peer.anyIpv4())` on the balancer's own security group. The listener writes
+a firewall rule.
+
+On the internal balancer that means `CidrIp: 0.0.0.0/0` landing in `internalAlbSg` — the group
+whose whole purpose is to accept the web tier and nothing else. Probed against 2.269.0 before
+writing a line of the layer: with `open` left alone the group gains an inline `0.0.0.0/0` rule
+on the listener port, with `open: false` it gains nothing.
+
+Nothing fails. The balancer is internal, so it has no public path today, and the chain in
+`lib/module1-security-groups.ts` reads exactly as it always did. It is a routing accident
+covering for a security decision, and it lasts until a module with a path into this VPC exists.
+
+Both listeners are created `open: false`, and layer 2's premise assertion — written for an
+entirely different reason, months earlier — is what catches it. That is the second time a layer 2
+guard has caught a layer 3 consequence; [ADR-0020](../adr/0020-empty-target-groups-declare-their-target-type.md)
+was the first, at planning time rather than implementation time.
+
+---
+
+## 10. The records this layer produces
 
 | ADR | Decision |
 |---|---|
@@ -348,6 +398,7 @@ confirms which one fires.
 | [0018](../adr/0018-the-certificate-is-optional.md) | The certificate is optional; HTTP is the default, and the public port is one decision shared by the listener and the security group |
 | [0019](../adr/0019-shallow-health-check-at-the-balancer.md) | The health check the balancer calls is shallow; the dependency check is a separate path called by hand |
 | [0020](../adr/0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare `targetType` explicitly |
+| [0021](../adr/0021-listeners-never-open-their-own-security-group.md) | Listeners never open their own security group - the CDK default writes a 0.0.0.0/0 rule into it |
 
 [ADR-0015](../adr/0015-reference-security-groups-by-identity.md) is amended, not superseded: its
 diagram's first arrow becomes `publicPort` instead of `443`. The chain, the five groups and the
@@ -355,7 +406,7 @@ six rules are unchanged, and its argument stands untouched.
 
 ---
 
-## 10. Open questions, carried not buried
+## 11. Open questions, carried not buried
 
 | Question | Why it is not answered here |
 |---|---|
