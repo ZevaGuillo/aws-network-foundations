@@ -1,6 +1,6 @@
 # 0026 — The application contract: no dependencies, bind `0.0.0.0`, obey the target group's port
 
-**Status:** Accepted
+**Status:** Accepted — amended by [0031](0031-one-runtime-node.md)
 **Date:** 2026-09-14
 
 ## Context
@@ -35,10 +35,20 @@ that refuses to admit it.
 Neither application imports anything outside its language's standard library. Python uses
 `http.server`; Node uses `http`. That looks like minimalism and it is four decisions:
 
-**It keeps [ADR-0025](0025-the-runtime-is-a-deployment-property.md) honest.** With dependencies,
-the Node column measures `dnf install nodejs` *plus* `npm install`, and a comparison that claims
-to be about runtimes is actually about package managers. Zero dependencies isolates the single
-variable that record says it is measuring.
+**It kept [ADR-0025](0025-the-runtime-is-a-deployment-property.md) honest.** With dependencies,
+the Node column would have measured `dnf install nodejs` *plus* `npm install`, and a comparison
+claiming to be about runtimes would actually have been about package managers.
+
+> **Amended by [ADR-0031](0031-one-runtime-node.md), 2026-09-14.** This reason no longer applies
+> — there is no comparison left to keep honest. The other three below do, and the last one
+> applies harder than it did: a boot that already pays for one unavoidable download should not
+> also pay for a package install.
+>
+> **The three clauses of this contract are unchanged.** What is stale is the arithmetic around
+> them: this record was written about two applications and there is now one, `lib/app/server.js`.
+> Read every "both files" and every `.py` below as that one file. The bind-address assertion, the
+> port assertion and the standard library assertion all still exist and still guard the same
+> three things.
 
 **It fits in user data.** The limit is **16 KB in raw form, before base64 encoding** — verified
 against the AWS documentation rather than assumed, because the figure is commonly quoted as the

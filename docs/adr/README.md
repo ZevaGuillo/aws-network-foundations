@@ -41,9 +41,10 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0022](0022-pin-the-tls-policy.md) | Pin the TLS policy on the public listener | Accepted | 2026-09-14 |
 | [0023](0023-no-redirect-listener.md) | Port 80 stays shut when there is a certificate | Accepted | 2026-09-14 |
 | [0024](0024-drop-invalid-header-fields.md) | Drop invalid header fields at the edge | Accepted | 2026-09-14 |
-| [0025](0025-the-runtime-is-a-deployment-property.md) | The runtime is a deployment property, and the boot path is the measurement | Accepted | 2026-09-14 |
-| [0026](0026-the-application-contract.md) | The application contract: no dependencies, bind 0.0.0.0, obey the target group | Accepted | 2026-09-14 |
+| [0025](0025-the-runtime-is-a-deployment-property.md) | The runtime is a deployment property, and the boot path is the measurement | **Superseded by 0031** | 2026-09-14 |
+| [0026](0026-the-application-contract.md) | The application contract: no dependencies, bind 0.0.0.0, obey the target group | Accepted (amended by 0031) | 2026-09-14 |
 | [0027](0027-user-data-terminates-systemd-owns-the-process.md) | User data terminates; systemd owns the process | Accepted | 2026-09-14 |
 | [0028](0028-require-imdsv2.md) | Require IMDSv2, and nothing but Session Manager in the instance role | Accepted | 2026-09-14 |
 | [0029](0029-the-deep-check-is-a-reachability-probe.md) | The deep check is a reachability probe, not a health check | Accepted (amends 0019) | 2026-09-14 |
 | [0030](0030-instance-connect-endpoint-keeps-the-client-ip-off.md) | The Instance Connect Endpoint keeps the client IP off | Accepted | 2026-09-14 |
+| [0031](0031-one-runtime-node.md) | One runtime: Node | Accepted (supersedes 0025) | 2026-09-14 |

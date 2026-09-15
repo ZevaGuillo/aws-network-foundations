@@ -7,15 +7,6 @@ import { Construct } from 'constructs';
 import { PORTS, SecurityGroups } from './module1-security-groups';
 import { LoadBalancers } from './module1-load-balancers';
 
-/** The runtime the tiers run under. See docs/adr/0025-the-runtime-is-a-deployment-property.md. */
-export type Runtime = 'python' | 'node';
-
-/**
- * Python, because every default in this repository is the cheap, fast, self-contained one.
- * Amazon Linux 2023 ships it, so a default deployment downloads nothing at boot.
- */
-export const DEFAULT_RUNTIME: Runtime = 'python';
-
 /** systemd unit name, shared by the unit file and the command that starts it. */
 export const SERVICE_NAME = 'module1-app';
 
@@ -32,44 +23,45 @@ export const APP_DIR = '/opt/app';
 export const INSTANCE_TYPE = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO);
 
 /**
- * What separates the two runtimes, and it is deliberately almost nothing.
+ * The runtime, and the price of it stated once where it is paid.
  *
- * `install` is the entire experiment. Amazon Linux 2023 ships Python and does not ship Node, so
- * the Node column pays for a `dnf install` — minutes of boot time, and bytes through the NAT
- * Gateway at the $0.045/GB docs/adr/0008-s3-gateway-endpoint.md already wrote down. Everything
- * else about the two deployments is identical, which is what makes the comparison one variable.
+ * Amazon Linux 2023 ships Python and does **not** ship Node, so every instance this module
+ * launches installs a runtime before it can serve a request. That is minutes of boot time and
+ * bytes through the NAT Gateway at the $0.045/GB docs/adr/0008-s3-gateway-endpoint.md wrote
+ * down — on every launch, every scale-out and every instance refresh, with nothing to fall back
+ * to.
+ *
+ * Layer 4 shipped a second runtime for a while precisely to measure that cost against an
+ * alternative. The comparison was never run and the alternative was dropped, so this is now the
+ * only boot path rather than the expensive one of two. See docs/adr/0031-one-runtime-node.md,
+ * which supersedes docs/adr/0025-the-runtime-is-a-deployment-property.md.
+ *
+ * Layer 5 inherits this directly: a slower boot is a larger `estimatedInstanceWarmup`, which is
+ * a scaling policy that responds later.
  */
-const RUNTIMES = {
-  python: {
-    source: 'server.py',
-    interpreter: '/usr/bin/python3',
-    install: undefined,
-  },
-  node: {
-    source: 'server.js',
-    interpreter: '/usr/bin/node',
-    install: 'dnf install -y nodejs',
-  },
+const RUNTIME = {
+  source: 'server.js',
+  interpreter: '/usr/bin/node',
+  install: 'dnf install -y nodejs',
 } as const;
 
 /**
  * The application, read from disk at synth time.
  *
- * `lib/app/server.py` and `lib/app/server.js` are real, runnable programs rather than template
- * literals in this file. A literal cannot be linted, cannot be run, and hides a syntax error
- * until an instance boots cleanly in a private subnet and serves nothing. A file can be executed
- * before anything is deployed.
+ * `lib/app/server.js` is a real, runnable program rather than a template literal in this file.
+ * A literal cannot be linted, cannot be run, and hides a syntax error until an instance boots
+ * cleanly in a private subnet and serves nothing. A file can be executed before anything is
+ * deployed, and this one was.
  *
  * This is also why the application lives here and not in lib/config.ts: that module imports
  * nothing and touches nothing, which is the point of it
  * (docs/adr/0005-framework-free-configuration-module.md), and reading from disk is a dependency.
  */
-function applicationSource(runtime: Runtime): string {
-  return fs.readFileSync(path.join(__dirname, 'app', RUNTIMES[runtime].source), 'utf8');
+function applicationSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'app', RUNTIME.source), 'utf8');
 }
 
 interface BootScriptOptions {
-  readonly runtime: Runtime;
   readonly tier: string;
   readonly port: number;
   /** Frontend only. Its absence is what makes a process a backend. */
@@ -99,8 +91,8 @@ interface BootScriptOptions {
  * See docs/adr/0027-user-data-terminates-systemd-owns-the-process.md.
  */
 function bootScript(options: BootScriptOptions): string {
-  const { runtime, tier, port, backendUrl } = options;
-  const { interpreter, source, install } = RUNTIMES[runtime];
+  const { tier, port, backendUrl } = options;
+  const { interpreter, source, install } = RUNTIME;
 
   const environment = [`Environment=PORT=${port}`, `Environment=TIER=${tier}`];
   if (backendUrl !== undefined) {
@@ -111,10 +103,12 @@ function bootScript(options: BootScriptOptions): string {
     '#!/bin/bash',
     'set -euxo pipefail',
     '',
-    ...(install === undefined ? [] : [install, '']),
+    // Not optional, and not free. See RUNTIME above.
+    install,
+    '',
     `mkdir -p ${APP_DIR}`,
     `cat > ${APP_DIR}/${source} <<'MODULE1_APPLICATION'`,
-    applicationSource(runtime).trimEnd(),
+    applicationSource().trimEnd(),
     'MODULE1_APPLICATION',
     '',
     `cat > /etc/systemd/system/${SERVICE_NAME}.service <<'MODULE1_UNIT'`,
@@ -147,18 +141,15 @@ export interface ComputeProps {
 
   /** Layer 3. The tiers register in its target groups and the frontend reaches its internal balancer. */
   readonly loadBalancers: LoadBalancers;
-
-  /** Defaults to `DEFAULT_RUNTIME`. */
-  readonly runtime?: Runtime;
 }
 
 /**
  * Module 1, layer 4 — the application.
  *
  * Two launch templates, one instance each, and the administrative path layer 2 wrote rules for
- * two layers ago. This is the first layer that produces something other than infrastructure: the
- * difference in boot time between the two runtimes, which is measured rather than estimated and
- * becomes layer 5's warm-up figure.
+ * two layers ago. This is the first layer that runs code rather than only shaping the network
+ * around it, and the number worth taking from it is how long an instance takes to go from
+ * launched to in service - which becomes layer 5's warm-up figure.
  *
  * The instances are fixed and there is no scaling here. Layer 5 replaces them with auto scaling
  * groups built from these same launch templates — the launch template is the unit of boot
@@ -184,7 +175,6 @@ export class Compute extends Construct {
     super(scope, id);
 
     const { vpc, securityGroups, loadBalancers } = props;
-    const runtime = props.runtime ?? DEFAULT_RUNTIME;
 
     const privateSubnets = vpc.selectSubnets({
       subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -225,7 +215,7 @@ export class Compute extends Construct {
         instanceType: INSTANCE_TYPE,
         securityGroup,
         role: this.role,
-        userData: ec2.UserData.custom(bootScript({ runtime, tier, port, backendUrl })),
+        userData: ec2.UserData.custom(bootScript({ tier, port, backendUrl })),
 
         /**
          * Not the default, and the default is the problem.

@@ -1,7 +1,16 @@
 # 0025 — The runtime is a deployment property, and the boot path is the measurement
 
-**Status:** Accepted
+**Status:** Superseded by [0031](0031-one-runtime-node.md)
 **Date:** 2026-09-14
+
+> **Superseded on 2026-09-14, the same day, and by scope rather than by evidence.** The second
+> runtime was removed before the comparison it existed for was ever run, so the table this
+> record calls "the deliverable" does not exist. The "when this is revisited" clause below
+> anticipated dropping a runtime *after* the numbers came in; that is not what happened.
+>
+> What the reversal cost is in [ADR-0031](0031-one-runtime-node.md): Node is the runtime Amazon
+> Linux 2023 does not ship, so the `dnf install` this record framed as the expensive opt-in is
+> now the only boot path, on every launch, with nothing to fall back to.
 
 ## Context
 

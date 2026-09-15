@@ -15,19 +15,18 @@ import { synth } from './support/synth';
  * surfaces in layer 5 as an auto scaling group that times out. None of that turns a template
  * red on its own.
  *
- * docs/adr/0025-the-runtime-is-a-deployment-property.md
  * docs/adr/0026-the-application-contract.md
  * docs/adr/0027-user-data-terminates-systemd-owns-the-process.md
  * docs/adr/0028-require-imdsv2.md
  * docs/adr/0029-the-deep-check-is-a-reachability-probe.md
  * docs/adr/0030-instance-connect-endpoint-keeps-the-client-ip-off.md
+ * docs/adr/0031-one-runtime-node.md
  */
 
-const APP_DIR = path.join(__dirname, '..', 'lib', 'app');
-const SOURCES = {
-  python: fs.readFileSync(path.join(APP_DIR, 'server.py'), 'utf8'),
-  node: fs.readFileSync(path.join(APP_DIR, 'server.js'), 'utf8'),
-};
+const APPLICATION = fs.readFileSync(
+  path.join(__dirname, '..', 'lib', 'app', 'server.js'),
+  'utf8',
+);
 
 /** The one logical id of `type` whose own id contains `fragment`. */
 function logicalIdFor(template: Template, type: string, fragment: string): string {
@@ -207,28 +206,26 @@ describe('the boot script', () => {
     expect(backend).not.toContain(internalAlb);
   });
 
-  test.each([
-    ['python', undefined, false],
-    ['node', 'node' as const, true],
-  ])('under %s, installs a runtime only when it has to', (_name, runtime, installs) => {
+  test('installs the runtime, because the AMI does not ship it', () => {
     /**
-     * The experiment, guarded. Amazon Linux 2023 ships Python and not Node, so the Node column
-     * costs a `dnf install` — minutes of boot time and bytes through the NAT Gateway at
-     * $0.045/GB. A Python deployment that quietly installs something is not the measurement
-     * ADR-0025 claims it is, and the whole comparison would be off by whatever it downloaded.
+     * Amazon Linux 2023 ships Python and does not ship Node, so this line is on every launch,
+     * every scale-out and every instance refresh. It is the cost ADR-0031 accepted when the
+     * second runtime was removed before the comparison was ever run.
+     *
+     * Without it, `ExecStart` points at an interpreter that is not on the instance. systemd
+     * retries forever under `Restart=always`, the target never turns healthy, and nothing
+     * names the missing package.
      */
-    const { template } = synth(runtime === undefined ? undefined : { runtime });
+    const { template } = synth();
 
     for (const id of Object.values(launchTemplates(template))) {
-      const script = userDataOf(template, id);
-
-      expect(script.includes('dnf install')).toBe(installs);
+      expect(userDataOf(template, id)).toContain('dnf install -y nodejs');
     }
   });
 });
 
 describe('the applications', () => {
-  test.each(Object.entries(SOURCES))('%s binds every interface, never the loopback', (_name, source) => {
+  test('binds every interface, never the loopback', () => {
     /**
      * The assertion that reads a source file rather than a template, and the only mechanical way
      * to catch this.
@@ -243,42 +240,28 @@ describe('the applications', () => {
      *
      * See docs/adr/0026-the-application-contract.md.
      */
-    expect(source).toContain('0.0.0.0');
-    expect(source).not.toContain('127.0.0.1');
+    expect(APPLICATION).toContain('0.0.0.0');
+    expect(APPLICATION).not.toContain('127.0.0.1');
   });
 
-  test.each(Object.entries(SOURCES))('%s never retypes the port it listens on', (_name, source) => {
+  test('never retypes the port it listens on', () => {
     // The port arrives from PORTS through the systemd unit. A literal here is a second place for
     // it to be wrong, and the two would not fail together.
-    expect(source).not.toContain(String(PORTS.frontend));
-    expect(source).toContain('PORT');
+    expect(APPLICATION).not.toContain(String(PORTS.frontend));
+    expect(APPLICATION).toContain('PORT');
   });
 
-  // Every imported name is compared against an allowlist rather than pattern-matched for
-  // "looks external". A new import has to be added here deliberately, which is the point:
-  // ADR-0025 only measures runtimes for as long as neither side grows a package manager, and
-  // ADR-0026's 16 KB headroom only holds while both files stay this size.
-
-  test('python imports nothing outside the standard library', () => {
-    const allowed = [
-      'json',
-      'os',
-      'socket',
-      'sys',
-      'time',
-      'urllib.error',
-      'urllib.request',
-      'http.server',
-    ];
-    const imported = [...SOURCES.python.matchAll(/^(?:import|from)\s+([\w.]+)/gm)].map((m) => m[1]);
-
-    expect(imported.length).toBeGreaterThan(0);
-    expect(imported.filter((name) => !allowed.includes(name))).toEqual([]);
-  });
-
-  test('node requires nothing outside the standard library', () => {
+  test('requires nothing outside the standard library', () => {
+    // Every required name is compared against an allowlist rather than pattern-matched for
+    // "looks external", because `require('http')` looks external to most such patterns — which
+    // is how the first version of this test passed while being wrong.
+    //
+    // A dependency has to be added here deliberately, and the reasons to keep it at zero
+    // outlived the runtime comparison that was the first of them: ADR-0026's 16 KB headroom,
+    // the cost of a slow instance refresh, and a boot that already pays for one download it
+    // cannot avoid.
     const allowed = ['http', 'os'];
-    const required = [...SOURCES.node.matchAll(/require\(['"]([^'"]+)['"]\)/g)].map((m) => m[1]);
+    const required = [...APPLICATION.matchAll(/require\(['"]([^'"]+)['"]\)/g)].map((m) => m[1]);
 
     expect(required.length).toBeGreaterThan(0);
     expect(required.filter((name) => !allowed.includes(name))).toEqual([]);
@@ -329,11 +312,9 @@ describe('the tiers', () => {
 });
 
 describe('the stack as a whole', () => {
-  test('still synthesizes without a single warning annotation, under both runtimes', () => {
-    for (const props of [undefined, { runtime: 'node' as const }]) {
-      const warnings = Annotations.fromStack(synth(props).stack).findWarning('*', Match.anyValue());
+  test('still synthesizes without a single warning annotation', () => {
+    const warnings = Annotations.fromStack(synth().stack).findWarning('*', Match.anyValue());
 
-      expect(warnings).toEqual([]);
-    }
+    expect(warnings).toEqual([]);
   });
 });

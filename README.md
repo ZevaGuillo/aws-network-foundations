@@ -46,7 +46,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 52 assertions, no AWS account touched
+npm test                 # 48 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
@@ -90,17 +90,16 @@ groups, target groups and the S3 gateway endpoint carry no hourly charge.
 Layer 3 roughly doubled this figure and layer 4 added to it, which is the reason the advice above
 is not a formality. Deploy it, look at it, destroy it.
 
-## The runtime comparison
+## Boot time, and why it is worth measuring
 
-Layer 4 ships two applications rather than one, because the difference between them is a number
-worth having rather than a preference worth arguing about. Amazon Linux 2023 ships Python and
-does not ship Node, so the Node path pays for a `dnf install` at every boot: time before an
-instance serves a request, and bytes through the NAT Gateway at $0.045/GB.
+The tiers run Node, which Amazon Linux 2023 does not ship. So every instance installs a runtime
+before it can answer a request: `dnf install -y nodejs` on every launch, every scale-out and
+every instance refresh, with bytes leaving through the NAT Gateway at $0.045/GB.
 
-```bash
-npx cdk deploy                             # Python, the default
-npx cdk deploy -c runtime=node             # the same stack, the other runtime
-```
+That is a real cost with nothing cheaper to fall back to, and it was chosen knowingly —
+[ADR-0031](docs/adr/0031-one-runtime-node.md) records what was removed and what removing it cost.
+Layer 5 inherits the number directly: a slower boot is a larger `estimatedInstanceWarmup`, which
+is a scaling policy that responds later.
 
 | Number | How it is taken |
 |---|---|
@@ -108,8 +107,7 @@ npx cdk deploy -c runtime=node             # the same stack, the other runtime
 | Where the time went | `cloud-init analyze blame` over Session Manager, which attributes boot time per module |
 | Bytes through the NAT | The NAT Gateway's `BytesOutToDestination` across the boot window |
 
-The table those produce is the output of layer 4. It is not filled in yet — see
-[the layer 4 plan](docs/plans/module1-layer4-application.md) for the procedure.
+Not taken yet. It has to be, before layer 5 can estimate anything.
 
 ## When something boots and serves nothing
 
@@ -182,8 +180,7 @@ lib/
   module1-load-balancers.ts  two balancers, two listeners, two target groups
   module1-compute.ts         launch templates, the instance role, the way in
   app/
-    server.py   the application, Python - runnable locally
-    server.js   the application, Node - the same program, for the comparison
+    server.js   the application - a real file, runnable locally
 test/         assertions against the synthesized template
 docs/
   adr/        one record per decision, Nygard format

@@ -8,7 +8,7 @@
 The obvious way to end a boot script is to start the server:
 
 ```bash
-python3 /opt/app/server.py
+node /opt/app/server.js
 ```
 
 It works, in the sense that the application serves traffic. It is wrong in three ways, and none
@@ -47,7 +47,7 @@ instances.
 
 ```
 [Service]
-ExecStart=/usr/bin/python3 /opt/app/server.py
+ExecStart=/usr/bin/node /opt/app/server.js
 Restart=always
 RestartSec=2
 ```

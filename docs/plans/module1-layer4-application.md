@@ -1,6 +1,20 @@
 # Implementation Plan — Module 1, Layer 4: The Application
 
-**Status:** implemented
+**Status:** implemented, then narrowed — see the note below
+
+> **Amended 2026-09-14.** This plan was written around a two-runtime comparison, and the second
+> runtime was removed before the comparison was ever run
+> ([ADR-0031](../adr/0031-one-runtime-node.md), superseding
+> [ADR-0025](../adr/0025-the-runtime-is-a-deployment-property.md)). Node is the one that stayed.
+>
+> Sections 3 and 11 describe an experiment that no longer exists. They are left standing because
+> they are the reasoning that was in play when the layer was built, and because — per §11 — the
+> boot time still has to be taken. It is now one measurement rather than two and a difference.
+>
+> Everything else in this plan is current: the contract in §4, the zero-dependency rule in §5,
+> the probe in §6, the boot script in §7, the identity decisions in §8, and the boundary move in
+> §1 all landed as written.
+
 **Scope:** `lib/module1-compute.ts` + `lib/app/` + its assertions, wired into the module 1 stack
 **Date:** 2026-09-14
 
@@ -60,8 +74,7 @@ behaviour and it does not change.
 | File | Contents |
 |---|---|
 | `lib/module1-compute.ts` | Launch templates, instance role, Instance Connect Endpoint, one instance per tier, the user data builder |
-| `lib/app/server.py` | The application, Python |
-| `lib/app/server.js` | The application, Node |
+| `lib/app/server.js` | The application |
 | `lib/module1-stack.ts` | Gains a `runtime` property and instantiates the tiers |
 | `test/module1-compute.test.ts` | The assertions in §9 |
 | `README.md` | Status, cost, the measurement table once it has numbers |

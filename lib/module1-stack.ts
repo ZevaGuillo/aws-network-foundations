@@ -4,7 +4,7 @@ import { Construct } from 'constructs';
 import { MODULE_1_NETWORK } from './config';
 import { SecurityGroups, publicPort } from './module1-security-groups';
 import { LoadBalancers } from './module1-load-balancers';
-import { Compute, Runtime } from './module1-compute';
+import { Compute } from './module1-compute';
 
 export interface Module1StackProps extends cdk.StackProps {
   /**
@@ -28,18 +28,6 @@ export interface Module1StackProps extends cdk.StackProps {
    * See docs/adr/0018-the-certificate-is-optional.md.
    */
   readonly certificateArn?: string;
-
-  /**
-   * Which runtime the tiers run under. Defaults to Python.
-   *
-   * Third property on this stack, on the same rule as the other two: a value becomes a property
-   * when it changes what a given deployment *is*. This one is the layer 4 experiment — Amazon
-   * Linux 2023 ships Python and does not ship Node, so the same stack deployed twice produces two
-   * boot times, and the difference is the layer output rather than an estimate.
-   *
-   * See docs/adr/0025-the-runtime-is-a-deployment-property.md.
-   */
-  readonly runtime?: Runtime;
 }
 
 /**
@@ -253,15 +241,15 @@ export class Module1Stack extends cdk.Stack {
      * Two t3.micro instances add roughly $15/month to a module already at roughly $65. Small
      * next to the balancers, and still a third line that costs money by existing.
      *
-     * The output of this layer is not a resource. It is the difference in boot time between the
-     * two runtimes, measured rather than estimated, which becomes layer 5's warm-up figure. See
-     * docs/plans/module1-layer4-application.md section 11 for how the number is taken.
+     * The tiers run Node, which Amazon Linux 2023 does not ship, so every launch pays for a
+     * `dnf install` before it can serve a request. That is the boot time layer 5 has to estimate
+     * around, and there is no cheaper path left in the module - see
+     * docs/adr/0031-one-runtime-node.md for what was removed and what it cost.
      */
     this.compute = new Compute(this, 'Compute', {
       vpc: this.vpc,
       securityGroups: this.securityGroups,
       loadBalancers: this.loadBalancers,
-      runtime: props?.runtime,
     });
   }
 }
