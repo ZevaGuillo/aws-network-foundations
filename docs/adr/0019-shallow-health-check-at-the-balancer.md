@@ -1,6 +1,6 @@
 # 0019 — The balancer's health check is shallow; the dependency check is a separate path
 
-**Status:** Accepted
+**Status:** Accepted — amended by [0029](0029-the-deep-check-is-a-reachability-probe.md)
 **Date:** 2026-09-14
 
 ## Context
@@ -86,6 +86,19 @@ and a circuit breaker is application code, not a target group property.
 that no infrastructure references, so it survives only by being carried forward in layer 4's
 plan. That is a weaker guarantee than this repository usually accepts, and it is stated plainly
 here rather than left to look like an oversight.
+
+> **Amended by [ADR-0029](0029-the-deep-check-is-a-reachability-probe.md), 2026-09-14.** Two
+> corrections, and the decision above survives both.
+>
+> The argument here is the weaker of the two available. The stronger one is that the backend's
+> health is **already measured, better** — it has its own target group behind the internal
+> balancer, polled per target, and `UnHealthyHostCount` is the signal. Chaining would not add a
+> measurement; it would duplicate an existing one at lower resolution and pay the cascade for it.
+>
+> And the paragraph above is wrong about the gap. `/health/deep` is not an under-guarded health
+> endpoint — it is not a health endpoint. It is a reachability probe across the chain layers 2
+> and 3 built, which covers hops the backend's own check cannot. The only thing worth asserting
+> about it is the negative: that no target group ever points at it.
 
 **The guard that does exist.** One assertion: the health check path in both target groups is
 `/health` and not `/`. It catches the default silently returning during a refactor, which is the

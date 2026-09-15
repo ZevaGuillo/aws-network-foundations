@@ -378,16 +378,16 @@ than either deployment on its own — which is the whole reason both runtimes sh
 
 ---
 
-## 12. The records this layer will produce
+## 12. The records this layer produced
 
 | ADR | Decision |
 |---|---|
-| 0025 | The runtime is a deployment property, and the boot path is the measurement |
-| 0026 | The application carries no dependencies, binds `0.0.0.0`, and obeys the target group's port |
-| 0027 | User data terminates; systemd owns the process |
-| 0028 | Require IMDSv2, and nothing but Session Manager in the instance role |
-| 0029 | The deep check is a reachability probe, not a health check — amends [0019](../adr/0019-shallow-health-check-at-the-balancer.md) |
-| 0030 | The Instance Connect Endpoint keeps the client IP off, through an L1 resource because no L2 exists |
+| [0025](../adr/0025-the-runtime-is-a-deployment-property.md) | The runtime is a deployment property, and the boot path is the measurement |
+| [0026](../adr/0026-the-application-contract.md) | The application carries no dependencies, binds `0.0.0.0`, and obeys the target group's port |
+| [0027](../adr/0027-user-data-terminates-systemd-owns-the-process.md) | User data terminates; systemd owns the process |
+| [0028](../adr/0028-require-imdsv2.md) | Require IMDSv2, and nothing but Session Manager in the instance role |
+| [0029](../adr/0029-the-deep-check-is-a-reachability-probe.md) | The deep check is a reachability probe, not a health check — amends [0019](../adr/0019-shallow-health-check-at-the-balancer.md) |
+| [0030](../adr/0030-instance-connect-endpoint-keeps-the-client-ip-off.md) | The Instance Connect Endpoint keeps the client IP off, through an L1 resource because no L2 exists |
 
 [ADR-0019](../adr/0019-shallow-health-check-at-the-balancer.md) is amended by 0029, not
 superseded. Its argument against chaining health checks stands and gains a second, stronger leg;

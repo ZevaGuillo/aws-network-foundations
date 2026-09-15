@@ -35,9 +35,15 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0016](0016-ingress-only-while-egress-stays-open.md) | Ingress-only rules while egress stays open | Accepted | 2026-09-13 |
 | [0017](0017-write-health-check-timings-out.md) | Write the health check and deregistration timings out, never inherit them | Accepted | 2026-09-14 |
 | [0018](0018-the-certificate-is-optional.md) | The certificate is optional, and the public port is one decision | Accepted | 2026-09-14 |
-| [0019](0019-shallow-health-check-at-the-balancer.md) | The balancer's health check is shallow; the dependency check is a separate path | Accepted | 2026-09-14 |
+| [0019](0019-shallow-health-check-at-the-balancer.md) | The balancer's health check is shallow; the dependency check is a separate path | Accepted (amended by 0029) | 2026-09-14 |
 | [0020](0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare their target type | Accepted | 2026-09-14 |
 | [0021](0021-listeners-never-open-their-own-security-group.md) | Listeners never open their own security group | Accepted | 2026-09-14 |
 | [0022](0022-pin-the-tls-policy.md) | Pin the TLS policy on the public listener | Accepted | 2026-09-14 |
 | [0023](0023-no-redirect-listener.md) | Port 80 stays shut when there is a certificate | Accepted | 2026-09-14 |
 | [0024](0024-drop-invalid-header-fields.md) | Drop invalid header fields at the edge | Accepted | 2026-09-14 |
+| [0025](0025-the-runtime-is-a-deployment-property.md) | The runtime is a deployment property, and the boot path is the measurement | Accepted | 2026-09-14 |
+| [0026](0026-the-application-contract.md) | The application contract: no dependencies, bind 0.0.0.0, obey the target group | Accepted | 2026-09-14 |
+| [0027](0027-user-data-terminates-systemd-owns-the-process.md) | User data terminates; systemd owns the process | Accepted | 2026-09-14 |
+| [0028](0028-require-imdsv2.md) | Require IMDSv2, and nothing but Session Manager in the instance role | Accepted | 2026-09-14 |
+| [0029](0029-the-deep-check-is-a-reachability-probe.md) | The deep check is a reachability probe, not a health check | Accepted (amends 0019) | 2026-09-14 |
+| [0030](0030-instance-connect-endpoint-keeps-the-client-ip-off.md) | The Instance Connect Endpoint keeps the client IP off | Accepted | 2026-09-14 |
