@@ -1,6 +1,6 @@
 # 0015 — Reference security groups by identity, never by address
 
-**Status:** Accepted
+**Status:** Accepted (the external port is parameterized by [0018](0018-the-certificate-is-optional.md))
 **Date:** 2026-09-13
 
 ## Context
@@ -40,17 +40,23 @@ message anywhere naming a security group, a rule, or a port.
 Five groups, each naming the previous **by identity**:
 
 ```
-internet --443--> externalAlb
-                       | 8080
-                  frontend <--22-- eice
-                       | 80
-                  internalAlb
-                       | 8080
-                   backend <--22-- eice
+internet --publicPort--> externalAlb
+                              | 8080
+                         frontend <--22-- eice
+                              | 80
+                         internalAlb
+                              | 8080
+                          backend <--22-- eice
 ```
 
-Exactly one group accepts a CIDR: `externalAlb`, on `0.0.0.0/0:443`, because the internet has
-no security group to name. Every other rule names a group.
+Exactly one group accepts a CIDR: `externalAlb`, on `0.0.0.0/0`, because the internet has no
+security group to name. Every other rule names a group.
+
+> **Amended by [ADR-0018](0018-the-certificate-is-optional.md), 2026-09-14.** The first arrow
+> read `443` when this record was written, and layer 3 made the certificate optional — so the
+> port is now 443 with a certificate and 80 without, derived by a single `publicPort()` helper
+> that both the listener and this rule call. The chain is unchanged: five groups, six rules,
+> one CIDR, every other source named by identity. Only the number on the first arrow moved.
 
 Each tier trusts **its balancer**, not the tier before it.
 

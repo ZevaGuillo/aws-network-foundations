@@ -31,5 +31,9 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0012](0012-never-auto-assign-public-ipv4-addresses.md) | Never auto-assign public IPv4 addresses | Accepted | 2026-09-13 |
 | [0013](0013-refuse-to-install-on-an-unsupported-node-version.md) | Refuse to install on an unsupported Node version | Accepted | 2026-09-13 |
 | [0014](0014-one-stack-per-module.md) | One stack per module | Accepted | 2026-09-13 |
-| [0015](0015-reference-security-groups-by-identity.md) | Reference security groups by identity, never by address | Accepted | 2026-09-13 |
+| [0015](0015-reference-security-groups-by-identity.md) | Reference security groups by identity, never by address | Accepted (external port parameterized by 0018) | 2026-09-13 |
 | [0016](0016-ingress-only-while-egress-stays-open.md) | Ingress-only rules while egress stays open | Accepted | 2026-09-13 |
+| [0017](0017-write-health-check-timings-out.md) | Write the health check and deregistration timings out, never inherit them | Accepted | 2026-09-14 |
+| [0018](0018-the-certificate-is-optional.md) | The certificate is optional, and the public port is one decision | Accepted | 2026-09-14 |
+| [0019](0019-shallow-health-check-at-the-balancer.md) | The balancer's health check is shallow; the dependency check is a separate path | Accepted | 2026-09-14 |
+| [0020](0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare their target type | Accepted | 2026-09-14 |
