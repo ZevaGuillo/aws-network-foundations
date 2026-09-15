@@ -38,3 +38,6 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0019](0019-shallow-health-check-at-the-balancer.md) | The balancer's health check is shallow; the dependency check is a separate path | Accepted | 2026-09-14 |
 | [0020](0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare their target type | Accepted | 2026-09-14 |
 | [0021](0021-listeners-never-open-their-own-security-group.md) | Listeners never open their own security group | Accepted | 2026-09-14 |
+| [0022](0022-pin-the-tls-policy.md) | Pin the TLS policy on the public listener | Accepted | 2026-09-14 |
+| [0023](0023-no-redirect-listener.md) | Port 80 stays shut when there is a certificate | Accepted | 2026-09-14 |
+| [0024](0024-drop-invalid-header-fields.md) | Drop invalid header fields at the edge | Accepted | 2026-09-14 |

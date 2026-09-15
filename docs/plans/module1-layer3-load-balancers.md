@@ -317,6 +317,9 @@ layer makes leaving the stack up materially more expensive than it was.
 | 7 | Every health check timing and the deregistration delay appear **explicitly** in the template | The whole §5 argument. If these vanish in a refactor the stack still deploys, with 150s and 300s, and nothing says so |
 | 8 | Each listener's default action forwards to the target group in front of the correct tier | A deploy that succeeds and routes the external balancer at the backend |
 | 9 | **The stack still synthesizes with zero warning annotations** | Inherited from layer 2, and §6 is why it is not free here |
+| 10 | The HTTPS listener pins an `SslPolicy`, and it is **not** `ELBSecurityPolicy-2016-08` | The §5 mechanism again, on the public surface: omitted, ELB applies a 2016 policy that still negotiates TLS 1.0. The second half catches the enum member named `RECOMMENDED`, which *is* that policy |
+| 11 | The external balancer drops invalid header fields | Default `false` forwards malformed headers to targets, which is the input to request smuggling |
+| 12 | With a certificate, the external balancer has exactly one listener and the complete set of CIDR rule ports is `[443]` | Makes a shut port 80 a decision rather than a consequence. `not.toContain` would pass with 80 open alongside; the set comparison does not |
 
 Assertion 7 is the one that would be tempting to skip, and it is the most valuable in the file.
 Every other assertion in this suite reads a value that is present; this one asserts that values
@@ -342,8 +345,8 @@ confirms which one fires.
 
 ## 9. Verification — done
 
-`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — **31 passed**, up from 19.
-Eleven assertions are new in `test/module1-load-balancers.test.ts`, and layer 2's premise
+`npx tsc --noEmit` and `npx cdk synth` both clean. `npx jest` — **34 passed**, up from 19.
+Fourteen assertions are new in `test/module1-load-balancers.test.ts`, and layer 2's premise
 assertion now runs twice because the public port is no longer a constant.
 
 Every assertion was mutation-tested, and each mutation was reverted:
@@ -357,6 +360,10 @@ Every assertion was mutation-tested, and each mutation was reverted:
 | the public port drifts — the listener follows the certificate, the group does not | the HTTPS-mode assertion and **layer 2's premise assertion** both fail |
 | `targetType` is removed | three fail: both warning assertions and the target group assertion |
 | `open: false` is removed from the internal listener | **five** fail, including both modes of layer 2's premise assertion |
+| `sslPolicy` is removed | the TLS assertion fails |
+| `sslPolicy` is set to `SslPolicy.RECOMMENDED` | the TLS assertion fails — the trap, caught |
+| `dropInvalidHeaderFields` is removed | the header assertion fails |
+| a redirect listener is added on port 80 | **five** fail, including the shut-port assertion |
 
 Two rows deserve a note, because the plan predicted them narrower than they turned out.
 
@@ -399,6 +406,9 @@ was the first, at planning time rather than implementation time.
 | [0019](../adr/0019-shallow-health-check-at-the-balancer.md) | The health check the balancer calls is shallow; the dependency check is a separate path called by hand |
 | [0020](../adr/0020-empty-target-groups-declare-their-target-type.md) | Empty target groups declare `targetType` explicitly |
 | [0021](../adr/0021-listeners-never-open-their-own-security-group.md) | Listeners never open their own security group - the CDK default writes a 0.0.0.0/0 rule into it |
+| [0022](../adr/0022-pin-the-tls-policy.md) | Pin the TLS policy on the public listener, and not to the enum member named `RECOMMENDED` |
+| [0023](../adr/0023-no-redirect-listener.md) | Port 80 stays shut when there is a certificate, and the cost to `publicPort()` of the alternative |
+| [0024](../adr/0024-drop-invalid-header-fields.md) | Drop invalid header fields at the edge, on the external balancer only |
 
 [ADR-0015](../adr/0015-reference-security-groups-by-identity.md) is amended, not superseded: its
 diagram's first arrow becomes `publicPort` instead of `443`. The chain, the five groups and the
@@ -410,8 +420,8 @@ six rules are unchanged, and its argument stands untouched.
 
 | Question | Why it is not answered here |
 |---|---|
-| Does the external balancer need an HTTP→HTTPS redirect listener? | Layer 2 carried this question forward to here, and the answer is still no — with no certificate there is nothing to redirect *to*, and with one it is a second listener and a second security group rule. It becomes real when a domain does |
+| Does the external balancer need an HTTP→HTTPS redirect listener? | **Answered, in [ADR-0023](../adr/0023-no-redirect-listener.md): no.** Layer 2 carried this forward and the review forced it to be decided rather than inherited. With a certificate, port 80 does not exist and `http://` times out. A redirect would need two ports open, turning `publicPort()` from a number into a list and weakening the guarantee that made layer 2 safe — the cost is on the record |
 | Is traffic inside the VPC plaintext? | Still yes. `PORTS.internal` is 80. End-to-end TLS needs an internal trust story, and the same certificate problem §3 solved by deferring applies inside the VPC. Revisit with module 2's edge security |
-| Should the balancers write access logs? | Access logs are how you prove what actually reached what, which is squarely this repository's subject — and they need an S3 bucket with a policy, which is a layer of its own. Deferred, deliberately, not forgotten |
+| Should the balancers write access logs? | Access logs are how you prove what actually reached what, which is squarely this repository's subject — and they need an S3 bucket with a policy granting the regional ELB account write access, which is a layer of its own rather than a property. Deferred, deliberately, and now said in the code as well as here, so it is not read as something nobody considered |
 | What happens to `/health/deep` if layer 4 never writes it? | Nothing fails. It is a requirement recorded in a plan, and no test can assert an endpoint that no infrastructure references. Layer 4's plan has to carry it forward or it is lost |
 | Does the 10-second interval survive layer 5? | Unknown, and measurable. An auto scaling group adding targets under load is exactly the condition that makes an aggressive health check flap. If it does, the number changes and §5's caveat is the record of why it was expected |

@@ -1,4 +1,5 @@
 import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { PORTS, publicPort } from '../lib/module1-security-groups';
 import { HEALTH_CHECK, DEREGISTRATION_DELAY } from '../lib/module1-load-balancers';
 import { synth } from './support/synth';
@@ -17,6 +18,9 @@ import { synth } from './support/synth';
  * docs/adr/0019-shallow-health-check-at-the-balancer.md
  * docs/adr/0020-empty-target-groups-declare-their-target-type.md
  * docs/adr/0021-listeners-never-open-their-own-security-group.md
+ * docs/adr/0022-pin-the-tls-policy.md
+ * docs/adr/0023-no-redirect-listener.md
+ * docs/adr/0024-drop-invalid-header-fields.md
  */
 
 /**
@@ -107,6 +111,27 @@ describe('the balancers', () => {
     expect(listenerOn(template, schemes.internal.id).DefaultActions).toEqual([
       expect.objectContaining({ Type: 'forward', TargetGroupArn: { Ref: backendTargets } }),
     ]);
+  });
+
+  test('drop invalid header fields on the one that faces the internet', () => {
+    /**
+     * Default `false`: headers carrying characters outside the HTTP specification are passed
+     * through to targets rather than removed, which is the raw material for request smuggling
+     * and header injection against whatever parses them downstream.
+     *
+     * Applied to the external balancer only. The internal one receives connections from the web
+     * tier and from nothing else, and by the time a request reaches it the external balancer has
+     * already sanitised it. See docs/adr/0024-drop-invalid-header-fields.md.
+     */
+    const { template } = synth();
+    const schemes = balancersByScheme(template);
+
+    const attributes = (balancer: { LoadBalancerAttributes: { Key: string; Value: string }[] }) =>
+      Object.fromEntries(balancer.LoadBalancerAttributes.map((a) => [a.Key, a.Value]));
+
+    expect(attributes(schemes['internet-facing'])).toMatchObject({
+      'routing.http.drop_invalid_header_fields.enabled': 'true',
+    });
   });
 
   test('never open their own security group, which the CDK does by default', () => {
@@ -242,6 +267,48 @@ describe('the external listener and the rule that has to agree with it', () => {
 
     expect(externalCidrRulePort(template)).toBe(PORTS.https);
     expect(externalCidrRulePort(template)).toBe(publicPort(CERTIFICATE_ARN));
+  });
+
+  test('pins a TLS policy, and not the one whose name says RECOMMENDED', () => {
+    /**
+     * The same disappearing act as the health check timings, on the one surface facing the
+     * internet: with no `sslPolicy`, the CDK emits no `SslPolicy` property and ELB applies
+     * `ELBSecurityPolicy-2016-08`, which still negotiates TLS 1.0 and 1.1. The value is in
+     * neither the TypeScript nor the template.
+     *
+     * The second half of this assertion is the trap. `SslPolicy.RECOMMENDED` *is*
+     * `ELBSecurityPolicy-2016-08` — the enum member named for the right answer holds the
+     * default you were trying to escape. `RECOMMENDED_TLS` is the modern one.
+     *
+     * See docs/adr/0022-pin-the-tls-policy.md.
+     */
+    const { template } = synth({ certificateArn: CERTIFICATE_ARN });
+    const listener = listenerOn(template, balancersByScheme(template)['internet-facing'].id);
+
+    expect(listener.SslPolicy).toBeDefined();
+    expect(listener.SslPolicy).not.toBe('ELBSecurityPolicy-2016-08');
+    expect(listener.SslPolicy).toBe(elbv2.SslPolicy.RECOMMENDED_TLS);
+  });
+
+  test('leaves port 80 shut when there is a certificate, rather than redirecting', () => {
+    // A consequence turned into a decision. http:// gets a timeout, not a 301, because no
+    // listener and no rule exist on 80. See docs/adr/0023-no-redirect-listener.md.
+    const { template } = synth({ certificateArn: CERTIFICATE_ARN });
+    const external = balancersByScheme(template)['internet-facing'].id;
+
+    const listeners = Object.values(
+      template.findResources('AWS::ElasticLoadBalancingV2::Listener'),
+    ).filter((listener) => listener.Properties.LoadBalancerArn?.Ref === external);
+
+    expect(listeners).toHaveLength(1);
+    expect(listeners[0].Properties.Port).toBe(PORTS.https);
+
+    const rules = Object.values(template.findResources('AWS::EC2::SecurityGroup'))
+      .flatMap((group) => group.Properties.SecurityGroupIngress ?? [])
+      .map((rule: { FromPort: number }) => rule.FromPort);
+
+    expect(rules).toEqual([PORTS.https]);
+    expect(rules).not.toContain(PORTS.http);
   });
 
   test('the internal listener is unaffected by the certificate either way', () => {

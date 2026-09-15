@@ -160,6 +160,15 @@ export class LoadBalancers extends Construct {
       port: PORTS.backend,
     });
 
+    /**
+     * Access logs are deliberately absent from both balancers.
+     *
+     * They are how you prove what actually reached what, which is squarely this repository's
+     * subject - and they need an S3 bucket with a policy granting the regional ELB account
+     * write access, which is a layer of its own rather than a property. Deferred, and recorded
+     * as deferred in docs/plans/module1-layer3-load-balancers.md section 11 so it is not
+     * mistaken for something nobody thought about.
+     */
     this.external = new elbv2.ApplicationLoadBalancer(this, 'External', {
       vpc,
       internetFacing: true,
@@ -168,6 +177,19 @@ export class LoadBalancers extends Construct {
       // Follows from `internetFacing` today. Stated because a balancer's subnets decide who can
       // reach it, and an inference is a poor place for that to live.
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+
+      /**
+       * Default `false`, which forwards headers containing characters outside the HTTP
+       * specification to the targets rather than removing them. That is the raw material for
+       * request smuggling and header injection: the balancer and whatever parses the request
+       * downstream disagree about where a header ends, and the disagreement is the exploit.
+       *
+       * On the external balancer only. The internal one is reached by the web tier and by
+       * nothing else, and anything arriving there has already passed through this.
+       *
+       * See docs/adr/0024-drop-invalid-header-fields.md.
+       */
+      dropInvalidHeaderFields: true,
     });
 
     this.internal = new elbv2.ApplicationLoadBalancer(this, 'Internal', {
@@ -178,27 +200,57 @@ export class LoadBalancers extends Construct {
     });
 
     /**
-     * The certificate decides two things at once, so they are built together.
+     * The certificate decides three things at once, so they are built as one value.
      *
      * The CDK rejects an HTTPS listener with no certificate and an HTTP listener carrying one,
-     * so the protocol and the certificates must move as a pair. The port moves with them, and
-     * it is not derived here: `publicPort()` is the single place that decision lives, because
-     * the external security group has to agree with it from another file entirely.
+     * so protocol, certificates and TLS policy cannot be chosen independently. Writing them as
+     * three separate ternaries is how one of them ends up on the wrong side.
      *
-     * See docs/adr/0018-the-certificate-is-optional.md.
+     * The port is not here: `publicPort()` is the single place that decision lives, because the
+     * external security group has to agree with it from another file entirely. See
+     * docs/adr/0018-the-certificate-is-optional.md.
+     *
+     * `sslPolicy` is the same disappearing act as the health check timings above. Omit it and
+     * the CDK emits no `SslPolicy` property at all, so ELB applies `ELBSecurityPolicy-2016-08`
+     * — which still negotiates TLS 1.0 and TLS 1.1, on the one surface in this architecture
+     * that faces the internet. The value would be in neither the TypeScript nor the template.
+     *
+     * `RECOMMENDED_TLS`, not `RECOMMENDED`. The enum member named for the right answer is
+     * literally `ELBSecurityPolicy-2016-08`: reaching for the obvious name returns the default
+     * you were trying to escape, and the diff looks like a fix.
+     *
+     * See docs/adr/0022-pin-the-tls-policy.md.
      */
-    const certificates =
+    const tls =
       certificateArn === undefined
-        ? undefined
-        : [elbv2.ListenerCertificate.fromArn(certificateArn)];
+        ? {
+            protocol: elbv2.ApplicationProtocol.HTTP,
+            certificates: undefined,
+            sslPolicy: undefined,
+          }
+        : {
+            protocol: elbv2.ApplicationProtocol.HTTPS,
+            certificates: [elbv2.ListenerCertificate.fromArn(certificateArn)],
+            sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS,
+          };
 
+    /**
+     * One listener on the external balancer, and with a certificate that means **port 80 does
+     * not exist**. Someone typing `http://` gets a timeout rather than a 301.
+     *
+     * That is a decision, not an oversight, and it has a price worth naming: the usual pattern
+     * is a second listener on 80 redirecting to 443, and it does not fit here. `publicPort()`
+     * returns *the* port precisely because one number is what makes the listener and the
+     * security group rule impossible to desynchronise. A redirect needs two ports open, which
+     * turns that single value into a list and weakens the guarantee that made layer 2 safe.
+     *
+     * So the abstraction that removed one silent failure makes a second one more expensive to
+     * remove. Closed is the stricter reading and the honest one while the default mode is HTTP
+     * on 80 anyway. See docs/adr/0023-no-redirect-listener.md.
+     */
     this.external.addListener('Listener', {
       port: publicPort(certificateArn),
-      protocol:
-        certificates === undefined
-          ? elbv2.ApplicationProtocol.HTTP
-          : elbv2.ApplicationProtocol.HTTPS,
-      certificates,
+      ...tls,
       defaultTargetGroups: [this.frontendTargets],
 
       /**

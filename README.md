@@ -46,7 +46,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 31 assertions, no AWS account touched
+npm test                 # 34 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 
@@ -102,7 +102,7 @@ Deploy it, look at it, destroy it.
 | `AWS::EC2::SecurityGroup` | 5 | the trust chain — only the external balancer accepts an address |
 | `AWS::EC2::SecurityGroupIngress` | 5 | the group-to-group rules; the sixth is inlined on the external balancer |
 | `AWS::ElasticLoadBalancingV2::LoadBalancer` | 2 | one internet-facing in the public subnets, one internal in the private ones |
-| `AWS::ElasticLoadBalancingV2::Listener` | 2 | neither opens its own security group — [ADR-0021](docs/adr/0021-listeners-never-open-their-own-security-group.md) |
+| `AWS::ElasticLoadBalancingV2::Listener` | 2 | neither opens its own security group ([ADR-0021](docs/adr/0021-listeners-never-open-their-own-security-group.md)); the public one pins TLS 1.2 as its floor ([ADR-0022](docs/adr/0022-pin-the-tls-policy.md)) |
 | `AWS::ElasticLoadBalancingV2::TargetGroup` | 2 | empty until layer 5; every health check timing written out, none inherited |
 
 ## Address plan
