@@ -215,8 +215,14 @@ export class Module1Stack extends cdk.Stack {
      *
      * Two Application Load Balancers, and they are the most expensive thing in this module
      * after the NAT Gateway. Roughly $0.0225/hour each, so about $33/month for the pair before
-     * a single request is served, on top of the NAT's ~$32. Module 1 sitting idle goes from
-     * roughly $32/month to roughly $65/month, and this layer is where that happens.
+     * a single request is served, on top of the NAT's ~$32.
+     *
+     * The external one costs more than its hourly rate says. Internet-facing means a node per
+     * availability zone, each holding a public IPv4 address, and a public IPv4 address has been
+     * billed at $0.005/hour since February 2024 whether anything uses it or not — so this layer
+     * adds ~$7.30/month nobody declared. Module 1 sitting idle goes from roughly $36/month to
+     * roughly $77/month, and this layer is where that happens. The README's cost table carries
+     * the full arithmetic.
      *
      * The internal balancer is half of that and is not removable. A tier reachable only from
      * inside the VPC is the thing module 1 exists to demonstrate, and one balancer cannot
@@ -238,8 +244,12 @@ export class Module1Stack extends cdk.Stack {
      * layer 2 created two layers before anything wore it. The tiers register into the target
      * groups layer 3 left empty.
      *
-     * Two t3.micro instances add roughly $15/month to a module already at roughly $65. Small
-     * next to the balancers, and still a third line that costs money by existing.
+     * Two t3.micro instances add roughly $15/month, plus ~$1.28 of EBS nobody chose, to a module
+     * already at roughly $77 — about $93 all told. Small next to the balancers, and still a
+     * third line that costs money by existing.
+     *
+     * They add no public IPv4 charge, which is the one line in the bill that
+     * docs/adr/0012-never-auto-assign-public-ipv4-addresses.md is quietly responsible for.
      *
      * The tiers run Node, which Amazon Linux 2023 does not ship, so every launch pays for a
      * `dnf install` before it can serve a request. That is the boot time layer 5 has to estimate

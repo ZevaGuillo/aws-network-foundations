@@ -17,9 +17,9 @@ export const APP_DIR = '/opt/app';
 /**
  * The smallest thing that can run an HTTP server, because nothing here is under load.
  *
- * Two of these add roughly $15/month to a module already at roughly $65. That is small next to
- * the balancers and the NAT, and it is still the third line in this module that costs money by
- * existing rather than by being used.
+ * Two of these add roughly $15/month to a module already at roughly $77, which is what takes it
+ * to roughly $93. That is small next to the balancers and the NAT, and it is still the third
+ * line in this module that costs money by existing rather than by being used.
  */
 export const INSTANCE_TYPE = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO);
 

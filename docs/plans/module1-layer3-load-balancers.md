@@ -299,6 +299,13 @@ the concept the module exists to demonstrate, and one balancer cannot show it. S
 accepted and stated at the point of use, and the README's cost section is updated in the same
 commit rather than later.
 
+> **Amended 2026-10-04.** Those two figures are both low, and this layer is part of why. An
+> internet-facing balancer places a node in each availability zone and each one holds a public
+> IPv4 address, billed at $0.005/hour since February 2024 — about $7.30/month this section never
+> counted. The corrected figures are roughly $36/month before this layer and roughly $77/month
+> after it; the README's cost table carries the full arithmetic. The argument above is unchanged:
+> the internal balancer is still not removable, and it is still half the balancer bill.
+
 The operational conclusion is the one already in the README: deploy, measure, destroy. This
 layer makes leaving the stack up materially more expensive than it was.
 

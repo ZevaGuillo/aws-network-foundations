@@ -64,28 +64,43 @@ npx cdk deploy
 
 ## Cost
 
-> **Module 1 costs roughly $80/month sitting completely idle.** One NAT Gateway at about
-> $32/month, two Application Load Balancers at about $33/month for the pair, and two `t3.micro`
-> instances at about $15/month for the pair — all billed by the hour from creation, none of them
-> needing a single packet to charge you.
+> **Module 1 costs roughly $93/month sitting completely idle** — about $0.13 an hour, or $3.06 a
+> day. Everything in the table below is billed from the moment it is created, and none of it
+> needs a single packet to charge you.
 
 ```bash
 npx cdk destroy
 ```
 
-After destroying, check **EC2 → Elastic IPs** in the console. An unassociated Elastic IP is
-also billed, and orphaned addresses are the most common surprise on a teardown.
+After destroying, check **EC2 → Elastic IPs** in the console, or run
+`aws ec2 describe-addresses` and confirm it comes back empty. Orphaned addresses are the most
+common surprise on a teardown, and since February 2024 the surprise is larger: **every** public
+IPv4 address is billed, associated or not.
 
 Where the money goes, and what each number is a decision about:
 
-| Resource | Cost | Why this many |
-|---|---|---|
-| NAT Gateway × 1 | ~$32/month, plus $0.045/GB | The CDK's default is one per availability zone, which turns `new ec2.Vpc(this, 'Vpc')` into roughly $96/month from a line containing no numbers at all. What one gives up is a real trade — [ADR-0006](docs/adr/0006-single-nat-gateway-by-default.md) |
-| Application Load Balancer × 2 | ~$16.50/month each, plus LCUs | The internal one is half this bill and is not removable: a tier reachable only from inside the VPC is what module 1 exists to demonstrate, and one balancer cannot demonstrate it |
-| `t3.micro` × 2 | ~$7.50/month each | One instance per tier. Nothing here is under load, so the smallest thing that runs an HTTP server is the right size |
+| Resource | Per hour | Per month | Why this many |
+|---|---|---|---|
+| NAT Gateway × 1 | $0.045 | ~$32.85 | The CDK's default is one per availability zone, which turns `new ec2.Vpc(this, 'Vpc')` into roughly $96/month from a line containing no numbers at all. What one gives up is a real trade — [ADR-0006](docs/adr/0006-single-nat-gateway-by-default.md) |
+| Application Load Balancer × 2 | $0.045 | ~$32.85 | The internal one is half this bill and is not removable: a tier reachable only from inside the VPC is what module 1 exists to demonstrate, and one balancer cannot demonstrate it |
+| Public IPv4 address × 3 | $0.015 | ~$10.95 | Not a resource anyone declared. One rides the NAT Gateway's Elastic IP; the other two are the internet-facing balancer's nodes, one per availability zone |
+| `t3.micro` × 2 | $0.0208 | ~$15.18 | One instance per tier. Nothing here is under load, so the smallest thing that runs an HTTP server is the right size |
+| EBS `gp3` root × 16 GiB | $0.0018 | ~$1.28 | 8 GiB each, inherited from the Amazon Linux 2023 AMI rather than chosen. The one line in this table nobody wrote |
+| **Total** | **~$0.128** | **~$93** | |
+
+The public IPv4 line is the one worth reading twice, because **$0.005 per address per hour**
+arrived on 1 February 2024 and applies whether an address is attached to anything or not. It
+also puts a price on a decision that looks purely defensive from the outside:
+[ADR-0012](docs/adr/0012-never-auto-assign-public-ipv4-addresses.md) turns off
+`mapPublicIpOnLaunch`, and both tiers sit in private subnets anyway, so neither instance holds an
+address it would otherwise have been given. That is ~$7.30/month the architecture declines to
+spend, decided two layers earlier for a reason that was never about money.
 
 Everything else in module 1 is free: the VPC, subnets, route tables, internet gateway, security
-groups, target groups and the S3 gateway endpoint carry no hourly charge.
+groups, target groups, launch templates, the Instance Connect Endpoint and the S3 gateway
+endpoint all carry no hourly charge. Data processing is extra on top — $0.045/GB through the NAT
+and LCUs on the balancers — and in practice both round to nothing here, for a reason the boot
+time section works through.
 
 Layer 3 roughly doubled this figure and layer 4 added to it, which is the reason the advice above
 is not a formality. Deploy it, look at it, destroy it.
