@@ -1,15 +1,18 @@
 # Implementation Plan — Module 1, Layer 4: The Application
 
-**Status:** implemented, then narrowed — see the note below
+**Status:** implemented, narrowed, then measured — see the notes below
 
 > **Amended 2026-09-14.** This plan was written around a two-runtime comparison, and the second
 > runtime was removed before the comparison was ever run
 > ([ADR-0031](../adr/0031-one-runtime-node.md), superseding
 > [ADR-0025](../adr/0025-the-runtime-is-a-deployment-property.md)). Node is the one that stayed.
 >
-> Sections 3 and 11 describe an experiment that no longer exists. They are left standing because
-> they are the reasoning that was in play when the layer was built, and because — per §11 — the
-> boot time still has to be taken. It is now one measurement rather than two and a difference.
+> Section 3 describes an experiment that no longer exists. It is left standing because it is the
+> reasoning that was in play when the layer was built.
+>
+> **Amended again 2026-10-04.** The boot time has now been taken, on one runtime rather than two
+> and a difference. §11 carries the results and the three corrections that running it produced —
+> including a metric this plan named in the wrong direction.
 >
 > Everything else in this plan is current: the contract in §4, the zero-dependency rule in §5,
 > the probe in §6, the boot script in §7, the identity decisions in §8, and the boundary move in
@@ -375,19 +378,57 @@ before it.
 
 ## 11. How the measurement is actually taken
 
+**Taken 2026-10-04. The results are in the README; this section is now the procedure that
+produced them, corrected where running it proved it wrong.**
+
 The number this layer produces is not a test. It needs a procedure, and it goes in the README so
 it can be repeated rather than trusted.
 
-For each runtime, deploy, then:
+Deploy, then:
 
-| Number | How |
-|---|---|
-| **Launch to in-service** | Poll `aws elbv2 describe-target-health` until the target reports `healthy`, timing from the instance's launch. This is the number that becomes layer 5's `estimatedInstanceWarmup` |
-| **Where the time went** | `cloud-init analyze blame` on the instance over Session Manager. It attributes boot time per module, which separates "the AMI booted" from "we downloaded a runtime" |
-| **Bytes through the NAT** | The NAT Gateway's `BytesOutToDestination` metric across the boot window, which converts the Node column into the $0.045/GB from ADR-0008 |
+| Number | How | Measured |
+|---|---|---|
+| **Launch to in-service** | `LaunchTime` from `describe-instances` to `ActiveEnterTimestamp` from `systemctl show module1-app`, plus the balancer's detection window. This is the number that becomes layer 5's `estimatedInstanceWarmup` | 92s to serving, 102–112s to in-service |
+| **Where the time went** | `cloud-init analyze blame` on the instance, over Instance Connect. It attributes boot time per module, which separates "the AMI booted" from "we downloaded a runtime" | `config-scripts-user` 80.28s of 81.72s |
+| **Bytes through the NAT** | The NAT Gateway's `BytesOutToSource` metric across the boot window, which converts the Node column into the $0.045/GB from ADR-0008 | 169 KB, $0.0000076 |
 
-Three numbers, two runtimes, one table. That table is the layer's output, and it is worth more
-than either deployment on its own — which is the whole reason both runtimes ship.
+### Three corrections this section earned by being run
+
+**The metric was the wrong direction.** This table said `BytesOutToDestination`, which is traffic
+leaving the VPC *for* the internet — the HTTP requests, measured in kilobytes. A download arrives
+as `BytesInFromDestination` and is forwarded to the instance as `BytesOutToSource`. Asking for
+the wrong one would have returned a small number for the right reason and been believed.
+
+**Polling `describe-target-health` cannot time anything on its own.** The target group holds no
+history, so a poll started after the deploy finishes reports `healthy` on its first call and the
+elapsed time is however long you took to type the command. Run on a stack that had been up for
+nine minutes, it reported 563s — a number with no boot in it at all. Either poll in a second
+terminal *during* the deploy, or derive it as the corrected row above does, from two timestamps
+that are still there afterwards. The derived form is the better procedure: it is recoverable, and
+it does not require predicting when to start.
+
+**The balancer adds 10–20s that is not boot time.** `interval: 10` with
+`healthyThresholdCount: 2` means two consecutive passes, and the first probe lands anywhere in
+its interval. For `estimatedInstanceWarmup` that belongs in the number — layer 5 cares about when
+a target takes traffic. For "where did the time go" it has to come out.
+
+### And one thing it was not looking for
+
+The NAT column came back at seven ten-millionths of a dollar, because Amazon Linux 2023 serves
+its repositories from an in-region S3 bucket and the gateway endpoint from
+[ADR-0008](../adr/0008-s3-gateway-endpoint.md) carries them for free. `dnf repolist -v` on the
+instance is the proof — the `Repo-baseurl` is an `s3.us-east-1.amazonaws.com` host.
+
+The 169 KB that did cross the NAT is best explained by the SSM agent registering, since the
+instance role carries `AmazonSSMManagedInstanceCore` and there is no interface endpoint for SSM.
+
+That is a layer 1 decision zeroing a layer 4 bill, and it is the strongest argument this
+repository has produced for deciding things before they are needed. It also means the runtime's
+cost is entirely time, not bytes — so ADR-0031's "pay for it on every boot" is a boot-duration
+problem for layer 5 and not a data-transfer one.
+
+Three numbers, one runtime, one table — ADR-0031 removed the second column before this was ever
+run. That table is the layer's output.
 
 ---
 

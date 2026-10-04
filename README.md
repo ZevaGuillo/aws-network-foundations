@@ -11,7 +11,7 @@ ones that must be made before the first VPC exists, because they cannot be chang
 
 | Module | Scope | State |
 |---|---|---|
-| 1 | Base network, the security groups, the balancers, then the application | **Layers 1–4 built** |
+| 1 | Base network, the security groups, the balancers, then the application | **Layers 1–4 built, deployed and measured** |
 | 2 | — | Not started |
 | 3 | VPC peering across three VPCs, proving it is not transitive | Address range reserved |
 | 4 | PrivateLink between VPCs that cannot be peered | Address range reserved |
@@ -109,20 +109,45 @@ is not a formality. Deploy it, look at it, destroy it.
 
 The tiers run Node, which Amazon Linux 2023 does not ship. So every instance installs a runtime
 before it can answer a request: `dnf install -y nodejs` on every launch, every scale-out and
-every instance refresh, with bytes leaving through the NAT Gateway at $0.045/GB.
+every instance refresh.
 
 That is a real cost with nothing cheaper to fall back to, and it was chosen knowingly —
 [ADR-0031](docs/adr/0031-one-runtime-node.md) records what was removed and what removing it cost.
 Layer 5 inherits the number directly: a slower boot is a larger `estimatedInstanceWarmup`, which
 is a scaling policy that responds later.
 
-| Number | How it is taken |
-|---|---|
-| Launch to in-service | Poll `aws elbv2 describe-target-health` until the target reports `healthy`, timing from launch. This becomes layer 5's `estimatedInstanceWarmup` |
-| Where the time went | `cloud-init analyze blame` over Session Manager, which attributes boot time per module |
-| Bytes through the NAT | The NAT Gateway's `BytesOutToDestination` across the boot window |
+**Taken 2026-10-04**, on one `t3.micro` in `us-east-1`:
 
-Not taken yet. It has to be, before layer 5 can estimate anything.
+| Number | Measured | How |
+|---|---|---|
+| Launch to app serving | **92s** | `LaunchTime` from `describe-instances` to `ActiveEnterTimestamp` from `systemctl show module1-app` |
+| Launch to in-service | **102–112s** | The 92s above plus the balancer's own detection, which is 10–20s: two consecutive passes at a 10-second interval, and the first probe lands anywhere in it |
+| Where the time went | **80.28s of 81.72s** | `cloud-init analyze blame`, over Instance Connect. `config-scripts-user` — the user data, which is the `dnf install` — is 98% of the boot |
+| Bytes through the NAT | **169 KB, $0.0000076** | The NAT Gateway's `BytesOutToSource` summed across the boot window |
+
+Two of those deserve a sentence each.
+
+**87% of the boot is downloading Node.** The AMI reaches cloud-init in 1.44 seconds; the runtime
+takes eighty. ADR-0031 argued that cost rather than measuring it, and the argument was right.
+
+**The runtime download never touches the NAT Gateway**, which is why its line reads seven
+ten-millionths of a dollar instead of the $0.045/GB this section used to predict. Amazon Linux
+2023 serves its repositories out of an in-region S3 bucket:
+
+```
+Repo-baseurl : https://al2023-repos-us-east-1-de612dc2.s3.dualstack.us-east-1.amazonaws.com/...
+```
+
+So the S3 gateway endpoint from layer 1 carries it, free, and the 169 KB that did cross the NAT
+is the SSM agent registering plus cloud-init phoning home. A decision made in
+[ADR-0008](docs/adr/0008-s3-gateway-endpoint.md) — before a single instance existed — is what
+zeroed a bill incurred three layers later. That is the clearest thing this repository has
+demonstrated so far, and it was not the thing the measurement set out to find.
+
+**Layer 5 should use `estimatedInstanceWarmup: 120s`**: 92 measured, plus the worst case 20 of
+detection, plus margin. Taking it again means redeploying — see
+[section 11 of the layer 4 plan](docs/plans/module1-layer4-application.md) for the procedure, and
+the stack outputs for the ids it needs.
 
 ## When something boots and serves nothing
 
