@@ -46,7 +46,7 @@ CLI from those credentials — they are not variables you export.
 
 ```bash
 npm install
-npm test                 # 48 assertions, no AWS account touched
+npm test                 # 57 assertions, no AWS account touched
 npx cdk synth            # renders the CloudFormation template into cdk.out/
 ```
 

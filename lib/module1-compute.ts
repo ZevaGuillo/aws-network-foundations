@@ -4,6 +4,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import { Construct } from 'constructs';
+import { NAME_PREFIX } from './config';
 import { PORTS, SecurityGroups } from './module1-security-groups';
 import { LoadBalancers } from './module1-load-balancers';
 
@@ -266,20 +267,39 @@ export class Compute extends Construct {
       PORTS.backend,
     );
 
-    const instanceFrom = (name: string, launchTemplate: ec2.LaunchTemplate) =>
-      new ec2.CfnInstance(this, `${name}Instance`, {
+    const instanceFrom = (tier: 'frontend' | 'backend', launchTemplate: ec2.LaunchTemplate) =>
+      new ec2.CfnInstance(this, `${tier === 'frontend' ? 'Frontend' : 'Backend'}Instance`, {
         launchTemplate: {
           launchTemplateId: launchTemplate.launchTemplateId,
           version: launchTemplate.latestVersionNumber,
         },
+
+        /**
+         * The only tag on either instance, and it is here because of what the first deploy was
+         * like without it.
+         *
+         * An EC2 instance with no `Name` tag renders as an empty cell. Both tiers are the same
+         * instance type, in the same subnet, launched seconds apart — so the console offered two
+         * blank rows and no way to tell which one was the frontend. Identifying them meant
+         * reading physical ids back out of `describe-stack-resource` by logical id, which is a
+         * detour through CloudFormation to answer a question about EC2.
+         *
+         * It stays a tag rather than becoming a physical name because an instance has no name
+         * property to set: `Name` is a convention the console reads, nothing more. The same is
+         * not true of the target groups and balancers in module1-load-balancers.ts, which do
+         * take explicit names and deliberately do not get them — a generated name cannot
+         * collide on replacement, and the stack outputs in module1-stack.ts identify them
+         * without one.
+         */
+        tags: [{ key: 'Name', value: `${NAME_PREFIX}-${tier}` }],
 
         // First private subnet, and one availability zone is all this proves. Anything about
         // availability needs layer 5, which is also where the second zone starts to matter.
         subnetId: privateSubnets[0],
       });
 
-    this.frontend = instanceFrom('Frontend', this.frontendLaunchTemplate);
-    this.backend = instanceFrom('Backend', this.backendLaunchTemplate);
+    this.frontend = instanceFrom('frontend', this.frontendLaunchTemplate);
+    this.backend = instanceFrom('backend', this.backendLaunchTemplate);
 
     // Layer 3 built these empty and said so. This is the seam moving: a launch template nothing
     // launches from has no boot time to measure.
@@ -311,6 +331,10 @@ export class Compute extends Construct {
       subnetId: privateSubnets[0],
       securityGroupIds: [securityGroups.eice.securityGroupId],
       preserveClientIp: false,
+
+      // Same reasoning as the instances above: the VPC console lists endpoints by name, and an
+      // unnamed one is a blank row next to the S3 gateway endpoint from layer 1.
+      tags: [{ key: 'Name', value: `${NAME_PREFIX}-eice` }],
     });
   }
 }

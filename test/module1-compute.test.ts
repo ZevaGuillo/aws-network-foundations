@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
 import { PORTS } from '../lib/module1-security-groups';
+import { NAME_PREFIX } from '../lib/config';
 import { SERVICE_NAME } from '../lib/module1-compute';
 import { synth } from './support/synth';
 
@@ -316,5 +317,47 @@ describe('the stack as a whole', () => {
     const warnings = Annotations.fromStack(synth().stack).findWarning('*', Match.anyValue());
 
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('the Name tags', () => {
+  test('tell the two tiers apart, which nothing else in the console does', () => {
+    // Measured on the first deploy. Both tiers are the same instance type, in the same subnet,
+    // launched seconds apart, and an untagged instance renders as an empty cell — so the console
+    // offered two blank rows. Identifying them meant a detour through
+    // `describe-stack-resource` by logical id to answer a question about EC2.
+    const { template } = synth();
+    const instances = template.findResources('AWS::EC2::Instance');
+
+    const nameOf = (fragment: string) => {
+      const id = logicalIdFor(template, 'AWS::EC2::Instance', fragment);
+      const tags: { Key: string; Value: string }[] = instances[id].Properties.Tags ?? [];
+
+      return tags.find((tag) => tag.Key === 'Name')?.Value;
+    };
+
+    expect(nameOf('Frontend')).toEqual(`${NAME_PREFIX}-frontend`);
+    expect(nameOf('Backend')).toEqual(`${NAME_PREFIX}-backend`);
+    expect(nameOf('Frontend')).not.toEqual(nameOf('Backend'));
+  });
+
+  test('name the Instance Connect Endpoint, the only way into a private subnet', () => {
+    const { template } = synth();
+    const id = logicalIdFor(template, 'AWS::EC2::InstanceConnectEndpoint', 'Eice');
+    const tags: { Key: string; Value: string }[] =
+      template.findResources('AWS::EC2::InstanceConnectEndpoint')[id].Properties.Tags ?? [];
+
+    expect(tags.find((tag) => tag.Key === 'Name')?.Value).toEqual(`${NAME_PREFIX}-eice`);
+  });
+
+  test('are the only tags either tier carries', () => {
+    // A tagging strategy is a module of its own — cost allocation, owner, environment — and
+    // this is not it. `Name` is here because the console reads it; anything else would be a
+    // convention invented in passing and inherited by layer 5 without being decided.
+    const instances = synth().template.findResources('AWS::EC2::Instance');
+
+    for (const instance of Object.values(instances)) {
+      expect(instance.Properties.Tags.map((tag: { Key: string }) => tag.Key)).toEqual(['Name']);
+    }
   });
 });

@@ -156,3 +156,83 @@ describe('the intentional address collision', () => {
     expect(new Set(peerableRanges).size).toBe(peerableRanges.length);
   });
 });
+
+/**
+ * The outputs exist because of what the first deploy was like without them.
+ *
+ * `cdk deploy` printed a stack name and nothing else, so every step of the measurement in
+ * docs/plans/module1-layer4-application.md section 11 began by recovering a physical id the
+ * deploy already knew — `describe-stack-resource --logical-resource-id
+ * LoadBalancersFrontendTargets1600C5DB`, a CDK hash typed by hand, to find a target group so
+ * its health could be polled. Section 11 calls that procedure repeatable. It is not repeatable
+ * while it depends on reading hashes out of a synthesized template.
+ *
+ * Nothing here turns a template red on its own: a stack with no outputs deploys perfectly.
+ */
+describe('the stack outputs', () => {
+  const EXPECTED = [
+    'ExternalUrl',
+    'InternalAlbDnsName',
+    'FrontendTargetGroupArn',
+    'BackendTargetGroupArn',
+    'FrontendInstanceId',
+    'BackendInstanceId',
+    'NatGatewayId',
+  ];
+
+  test('name every value the measurement procedure needs, and nothing else', () => {
+    // An exact comparison rather than a containment check, on the same reasoning as the IAM
+    // policy assertion in the compute suite: a list that grows quietly is a list nobody reads.
+    const names = Object.keys(synth().template.findOutputs('*'));
+
+    expect(names.sort()).toEqual([...EXPECTED].sort());
+  });
+
+  test('each carry a description, because an output without one is a bare string', () => {
+    const outputs = synth().template.findOutputs('*');
+
+    for (const [name, output] of Object.entries(outputs)) {
+      expect(output.Description).toEqual(expect.stringMatching(/\S/));
+      expect(name).not.toEqual('');
+    }
+  });
+
+  test('export nothing, so nothing can import them and block a delete', () => {
+    // An exported output cannot be removed or renamed while another stack imports it, and the
+    // failure arrives as a refusal to delete this stack. Module 1 is one stack by
+    // docs/adr/0014-one-stack-per-module.md, so there is nothing to import them and nothing to
+    // gain by offering.
+    for (const output of Object.values(synth().template.findOutputs('*'))) {
+      expect(output.Export).toBeUndefined();
+    }
+  });
+
+  test('point the external url at the balancer over plain HTTP by default', () => {
+    // The scheme has to follow the certificate, because the listener does. ADR-0018 makes the
+    // certificate optional and ADR-0023 adds no redirect, so an https url with no certificate
+    // would be an output that names a port nothing listens on.
+    const { Value } = synth().template.findOutputs('ExternalUrl').ExternalUrl;
+
+    expect(Value['Fn::Join'][1][0]).toEqual('http://');
+  });
+
+  test('point it at HTTPS as soon as a certificate is supplied', () => {
+    const { Value } = synth({
+      certificateArn: 'arn:aws:acm:us-east-1:123456789012:certificate/abc',
+    }).template.findOutputs('ExternalUrl').ExternalUrl;
+
+    expect(Value['Fn::Join'][1][0]).toEqual('https://');
+  });
+
+  test('name the NAT Gateway the boot cost is measured against', () => {
+    // The one output found by walking the construct tree rather than read off a construct
+    // property, because the CDK creates NAT Gateways inside the Vpc under a path that encodes
+    // the subnet group name — `Vpc/PublicSubnet1/NATGateway`. Reading that path literally would
+    // couple this to the string 'Public' in subnetConfiguration.
+    const { template } = synth();
+    const { Value } = template.findOutputs('NatGatewayId').NatGatewayId;
+    const gateways = Object.keys(template.findResources('AWS::EC2::NatGateway'));
+
+    expect(gateways).toContain(Value.Ref);
+  });
+});

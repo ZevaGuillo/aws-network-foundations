@@ -251,5 +251,93 @@ export class Module1Stack extends cdk.Stack {
       securityGroups: this.securityGroups,
       loadBalancers: this.loadBalancers,
     });
+
+    this.declareOutputs(props?.certificateArn);
+  }
+
+  /**
+   * What a reader needs in their hand the moment the deploy finishes.
+   *
+   * This exists because of how the first deploy actually went. The template carried no outputs,
+   * so `cdk deploy` printed a stack name and nothing else — and every step after it started by
+   * recovering a physical id the deploy already knew:
+   *
+   *     aws cloudformation describe-stack-resource --stack-name Net-M1 \
+   *       --logical-resource-id LoadBalancersFrontendTargets1600C5DB ...
+   *
+   * A logical id with a CDK hash in it, typed by hand, to find a target group so its health
+   * could be polled. That is the measurement procedure in
+   * docs/plans/module1-layer4-application.md section 11 paying a toll on every single step, and
+   * section 11's whole claim is that the procedure is repeatable.
+   *
+   * Outputs are free. They create no resource, cost nothing per hour, and are the only part of
+   * a template whose audience is a person rather than CloudFormation. The constraint worth
+   * knowing is the one that bites later: an output's name is `Fn::ImportValue`-able once
+   * exported, and `export` is deliberately not used here. Nothing cross-stack reads these —
+   * module 1 is one stack by docs/adr/0014-one-stack-per-module.md — and an export cannot be
+   * removed or renamed while another stack imports it, which turns a convenience into a
+   * dependency that blocks deletion.
+   *
+   * The target group arns earn their place over the balancer DNS names: `describe-target-health`
+   * takes an arn and there is no way to look one up by tag, because a target group carries no
+   * name of its own here (module1-load-balancers.ts says why).
+   */
+  private declareOutputs(certificateArn?: string): void {
+    const scheme = certificateArn ? 'https' : 'http';
+
+    const outputs: Record<string, { value: string; description: string }> = {
+      ExternalUrl: {
+        value: `${scheme}://${this.loadBalancers.external.loadBalancerDnsName}`,
+        description: 'Public entry point. Routes: / and /health and /health/deep',
+      },
+      InternalAlbDnsName: {
+        value: this.loadBalancers.internal.loadBalancerDnsName,
+        description:
+          'Reachable only from the web tier. The frontend receives this through its systemd unit',
+      },
+      FrontendTargetGroupArn: {
+        value: this.loadBalancers.frontendTargets.targetGroupArn,
+        description: 'For describe-target-health when timing a launch to in-service',
+      },
+      BackendTargetGroupArn: {
+        value: this.loadBalancers.backendTargets.targetGroupArn,
+        description: 'For describe-target-health when timing a launch to in-service',
+      },
+      FrontendInstanceId: {
+        value: this.compute.frontend.ref,
+        description: 'For ec2-instance-connect ssh and for describe-instances LaunchTime',
+      },
+      BackendInstanceId: {
+        value: this.compute.backend.ref,
+        description: 'For ec2-instance-connect ssh and for describe-instances LaunchTime',
+      },
+    };
+
+    /**
+     * Found by walking the tree rather than by path, and conditional rather than assumed.
+     *
+     * The CDK creates NAT Gateways inside the `Vpc` construct under per-subnet ids, so the path
+     * encodes both the subnet group name and its index — `Vpc/PublicSubnet1/NATGateway`. Reading
+     * that path literally would couple this output to the string `'Public'` in
+     * subnetConfiguration above, which is a rename away from throwing at synthesis.
+     *
+     * Conditional because `natGateways` is a property: pass 0 and there is no gateway to name.
+     * An output whose value is `undefined` fails the synthesis, not the deploy, which is at
+     * least loud — but only if someone synthesizes with 0, and nobody does until they do.
+     */
+    const natGateway = this.node
+      .findAll()
+      .find((child): child is ec2.CfnNatGateway => child instanceof ec2.CfnNatGateway);
+
+    if (natGateway) {
+      outputs.NatGatewayId = {
+        value: natGateway.ref,
+        description: 'For the BytesOutToSource metric that prices a boot through the NAT',
+      };
+    }
+
+    for (const [name, { value, description }] of Object.entries(outputs)) {
+      new cdk.CfnOutput(this, name, { value, description });
+    }
   }
 }

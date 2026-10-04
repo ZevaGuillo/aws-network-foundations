@@ -77,6 +77,17 @@ export const IPV4_ADDRESS_PLAN = {
  * Module 1 network values. Each one is a number the AWS console would otherwise have chosen
  * for you; the reasoning for every override sits next to its use in the stack.
  */
+/**
+ * Prefix for the `Name` tags module 1 puts on resources the console renders without one.
+ *
+ * It matches the stack name from bin/app.ts in spirit but is not derived from it: a stack name
+ * is a construct id resolved at synthesis, and this is a plain string a `dnf`-less shell script
+ * or a `describe-instances --filter` can also use. Keeping them in step is a one-line job; a
+ * token here would make this module import the CDK, which
+ * docs/adr/0005-framework-free-configuration-module.md forbids.
+ */
+export const NAME_PREFIX = 'net-m1';
+
 export const MODULE_1_NETWORK = {
   /** Derived from the plan above, never retyped. One place to change, one place to be wrong. */
   vpcCidr: IPV4_ADDRESS_PLAN.module1.baseNetwork,
