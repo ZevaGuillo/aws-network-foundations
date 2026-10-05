@@ -96,3 +96,55 @@ export const MODULE_1_NETWORK = {
   subnetCidrMask: 24,
   natGateways: 1,
 } as const;
+
+/**
+ * Module 2 network values: a from-scratch NACL over module 1's public subnets, plus the flow
+ * log that makes its ACCEPT/REJECT decisions measurable.
+ */
+
+/** Prefix for module 2's `Name` tags, on the same reasoning as module 1's NAME_PREFIX above. */
+export const MODULE_2_NAME_PREFIX = 'net-m2';
+
+/**
+ * `RetentionInDays` is a CDK enum whose values happen to be the day counts themselves, so a
+ * plain number compiles against it and only fails once a bad value reaches a real deploy.
+ * The union is the decision made compile-checkable: adding `365` here without a matching case
+ * in `logs.RetentionDays` map at the construct boundary is a type error, not a surprise bill.
+ */
+export type FlowLogRetentionDays = 1 | 3 | 7;
+
+/** Same reasoning as FlowLogRetentionDays, for `ec2.FlowLogMaxAggregationInterval`. */
+export type FlowLogAggregationSeconds = 60 | 600;
+
+export const MODULE_2_NACL = {
+  /**
+   * Ingress DENY by source CIDR. Empty by default, so a plain `cdk deploy` denies nobody — E1
+   * editing this array is a deliberate, reviewed change, not shipped policy. Append-only:
+   * inserting at the front renumbers every entry after it, and a rule number is
+   * replace-on-update in CloudFormation, so old and new briefly coexist mid-update.
+   */
+  deniedSources: [] as readonly string[],
+
+  /**
+   * The NAT gateway's and the ALB's own ephemeral source ports — AWS fixes this range for NAT,
+   * independent of any client's operating system. Two plain numbers; `AclTraffic.tcpPortRange`
+   * is built from them at the construct boundary, where CDK concepts belong.
+   */
+  ephemeralPorts: { from: 1024, to: 65535 },
+
+  /**
+   * `false` scripts experiment E2's stateless-egress failure. It also drops every ALB health
+   * check, because `PORTS.frontend = 8080` sits inside the same range — collateral the plan doc
+   * states explicitly, not a surprise.
+   */
+  openEphemeralEgress: true,
+} as const;
+
+export const MODULE_2_FLOW_LOGS = {
+  /** Disposable evidence for this module's own experiments; module 5 owns durable retention. */
+  retentionDays: 7,
+  aggregationIntervalSeconds: 60,
+} as const satisfies {
+  retentionDays: FlowLogRetentionDays;
+  aggregationIntervalSeconds: FlowLogAggregationSeconds;
+};

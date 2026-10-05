@@ -60,6 +60,21 @@ export class Module1Stack extends cdk.Stack {
   /** Consumed by layer 5, which replaces the fixed instances with auto scaling groups. */
   public readonly compute: Compute;
 
+  /**
+   * The port the external listener actually bound: 80 with no certificate, 443 with one.
+   *
+   * A synth-time TypeScript number, assigned from the exact same `publicPort()` call that
+   * feeds `SecurityGroups` below — a third reader of one decision, not a second ternary. It
+   * renders as a literal wherever it is read, so it crosses the module 2 stack seam as a plain
+   * number and generates no cross-stack reference.
+   *
+   * Module 2's NACL is that third reader. The cost of a wrong value here is not a CDK error:
+   * a NACL ingress rule hardcoded to tcp/80 against a 443 listener still synthesizes, still
+   * deploys, and blackholes every request with a stateless REJECT that names neither the
+   * listener nor the security group. See docs/adr/0018-the-certificate-is-optional.md.
+   */
+  public readonly publicPort: number;
+
   constructor(scope: Construct, id: string, props?: Module1StackProps) {
     super(scope, id, props);
 
@@ -205,9 +220,13 @@ export class Module1Stack extends cdk.Stack {
      *
      * See docs/plans/module1-layer2-security-groups.md.
      */
+    // One call, assigned once, read twice below — not a repeated ternary in two places. See
+    // the field's own comment for what the two readers are and what drift between them costs.
+    this.publicPort = publicPort(props?.certificateArn);
+
     this.securityGroups = new SecurityGroups(this, 'SecurityGroups', {
       vpc: this.vpc,
-      publicPort: publicPort(props?.certificateArn),
+      publicPort: this.publicPort,
     });
 
     /**
