@@ -18,9 +18,10 @@ describe('synthModule2', () => {
     expect(stack).toBeInstanceOf(Module2Stack);
     expect(stack.node.root).toBe(module1.node.root);
 
-    // The skeleton this PR builds composes nothing yet — PR2 adds the NACL, PR3 the flow log.
-    // An empty Resources section is the deliberate, temporary shape here, not an accident.
-    expect(template.toJSON().Resources ?? {}).toEqual({});
+    // PR1 left this empty; PR2's NetworkAcls is now wired in, so the stack composes at least
+    // one real resource. test/module2-network-acls.test.ts owns the NACL's own shape — this
+    // assertion only guards that Module2Stack still wires it in at all.
+    template.resourceCountIs('AWS::EC2::NetworkAcl', 1);
   });
 
   test('accepts a publicPort override without touching module 1', () => {
