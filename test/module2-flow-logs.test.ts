@@ -7,7 +7,8 @@ import { synthModule2 } from './support/synth';
  * `vpc.addFlowLog()` scopes the resource to the VPC construct, which lives in `Net-M1`. Calling
  * it from `Module2Stack` would put `AWS::EC2::FlowLog` in module 1's template and invert the
  * reference direction module 2 depends on (`Net-M1` consuming `Net-M2`'s log group and IAM
- * role) — see design D (addFlowLog scoping finding) and docs/adr/0032.
+ * role) — see design D (addFlowLog scoping finding) and
+ * docs/adr/0032-module-2-own-stack.md.
  */
 describe('FlowLogs', () => {
   test('exactly one AWS::EC2::FlowLog exists on Net-M2, and none on Net-M1', () => {

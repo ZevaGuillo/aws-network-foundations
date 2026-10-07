@@ -51,3 +51,5 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0032](0032-module-2-own-stack.md) | Module 2 gets its own stack, and what that seam costs | Accepted | 2026-10-07 |
 | [0033](0033-rule-number-bands.md) | Rule numbers come from bands and declaration slots, never from a counter | Accepted | 2026-10-07 |
 | [0034](0034-ephemeral-range-rationale.md) | The ephemeral range serves the NAT gateway and the balancer, not the client | Accepted | 2026-10-07 |
+| [0035](0035-the-flow-log-is-disposable-evidence.md) | The flow log is disposable evidence, not durable observability | Accepted | 2026-10-07 |
+| [0036](0036-scripted-breakage-toggle.md) | `openEphemeralEgress` is a scripted-breakage toggle, not a hand edit | Accepted | 2026-10-07 |

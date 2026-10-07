@@ -17,9 +17,9 @@ old entry and the new one coexist for part of the update. A numbering scheme tha
 existing rule's number on an unrelated change reintroduces the exact ordering hazard above,
 mid-deploy, for a rule nobody touched.
 
-ADR-0036 (the `openEphemeralEgress` scripted-breakage toggle, recorded separately) is built to
-make that second hazard exercisable on purpose — disabling one egress slot is routine,
-scripted, and has to leave every other rule's number untouched to do its job.
+[ADR-0036](0036-scripted-breakage-toggle.md) (the `openEphemeralEgress` scripted-breakage
+toggle) is built to make that second hazard exercisable on purpose — disabling one egress slot
+is routine, scripted, and has to leave every other rule's number untouched to do its job.
 
 ## Decision
 
@@ -93,7 +93,7 @@ rule the moment an earlier slot is disabled: with `AllowEphemeralOut` at index 0
 `openEphemeralEgress: false`, a counter-based scheme would renumber `AllowHttpsOut` from 110
 down to 100. `RuleNumber` is replace-on-update, so the old entry at 110 and the new one at 100
 coexist mid-update and collide with whatever already holds 100 — disabling the egress ephemeral
-slot for ADR-0036's experiment E2 would have broken the very deploy the toggle exists to
+slot for [ADR-0036](0036-scripted-breakage-toggle.md)'s experiment E2 would have broken the very deploy the toggle exists to
 demonstrate. Numbering by declaration-slot index and filtering
 *after* numbering — skip the disabled slot, don't shift the ones after it — keeps every
 surviving rule's number fixed across the toggle, so disabling a slot is a clean single
