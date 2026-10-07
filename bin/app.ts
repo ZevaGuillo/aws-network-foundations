@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
 import { Module1Stack } from '../lib/module1-stack';
+import { Module2Stack } from '../lib/module2-stack';
+import { MODULE_2_NACL } from '../lib/config';
 import { resolveEnvironment } from '../lib/environment';
 
 const app = new cdk.App();
@@ -21,7 +23,7 @@ const app = new cdk.App();
  * See docs/adr/0014-one-stack-per-module.md, and
  * docs/adr/0011-name-stacks-by-module-before-the-first-deploy.md for the deadline itself.
  */
-new Module1Stack(app, 'Net-M1', {
+const m1 = new Module1Stack(app, 'Net-M1', {
   /**
    * The account and region this stack is specialized for, read from the credentials the CDK
    * CLI resolved rather than written here.
@@ -36,5 +38,27 @@ new Module1Stack(app, 'Net-M1', {
    *
    * See docs/adr/0010-resolve-the-deployment-environment-from-the-cli.md.
    */
+  env: resolveEnvironment(process.env),
+});
+
+/**
+ * `Net-M2` — a from-scratch NACL over module 1's public subnets, plus the evidence flow log
+ * that makes its ACCEPT/REJECT decisions measurable. Built from `m1`'s VPC and resolved public
+ * port **by object reference**, not by a second `certificateArn` or a repeated `publicPort()`
+ * call: see `Module2StackProps.publicPort` for what a second, independently-derived answer
+ * would cost the moment the two drift. See docs/adr/0014-one-stack-per-module.md and
+ * docs/adr/0032-module-2-own-stack.md.
+ *
+ * `deniedSources` and `openEphemeralEgress` thread `MODULE_2_NACL`'s own defaults through
+ * explicitly rather than leaving them to `NetworkAcls`' internal fallback. Both already resolve
+ * to the same value either way; writing them here is what makes E1 (editing `deniedSources`)
+ * and E2 (`openEphemeralEgress: false`) one-line config edits in `lib/config.ts` instead of a
+ * second place to remember this call exists.
+ */
+new Module2Stack(app, 'Net-M2', {
+  vpc: m1.vpc,
+  publicPort: m1.publicPort,
+  deniedSources: MODULE_2_NACL.deniedSources,
+  openEphemeralEgress: MODULE_2_NACL.openEphemeralEgress,
   env: resolveEnvironment(process.env),
 });
