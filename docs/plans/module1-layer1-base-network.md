@@ -18,14 +18,31 @@ A single VPC that every later module either extends or deliberately collides wit
 | Module | What it adds | Dependency on this layer |
 |---|---|---|
 | 1 — Base network | VPC, external and internal load balancing, EC2 tiers, auto scaling | **This is its first layer** |
-| 2 — Edge security | Network ACLs and flow logs over module 1 | Reuses this VPC and its subnets |
+| 2 — Edge security | Network ACLs over module 1's public subnets, plus the **evidence** flow log that measures them | Reuses this VPC and its subnets |
 | 3 — Multi-VPC and peering | Cross-region peering, non-transitivity proof | **Fails if address ranges overlap** — [ADR-0003](../adr/0003-repo-wide-ipv4-addressing-plan.md) |
 | 4 — Private service exposure | Identical-range experiment, endpoint policy | Needs DNS enabled ([ADR-0009](../adr/0009-declare-dns-support-explicitly.md)); extends the endpoint ([ADR-0008](../adr/0008-s3-gateway-endpoint.md)) |
-| 5 — Observability | Flow logs and query layer | Consumes this VPC as a log source |
+| 5 — Observability | The **durable** flow-log destination and the query layer over it | Consumes this VPC as a log source |
 
 That table is the reason the configuration module carries a repo-wide address plan rather than
 module 1's own range: two of the five modules are about connecting VPCs, and address ranges
 cannot be changed after creation.
+
+### Two modules write flow logs, and the split is deliberate
+
+Rows 2 and 5 both say flow log, and they are not the same resource. Module 2's is an
+**instrument**: it exists to make its own NACL's ACCEPT/REJECT decisions measurable during module
+2's experiments, it owns a log group with one-week retention and `RemovalPolicy.DESTROY`, and
+`cdk destroy Net-M2` takes it with the stack —
+[ADR-0035](../adr/0035-the-flow-log-is-disposable-evidence.md). Module 5 owns the other half: the
+durable destination, whatever retention a real observability record justifies, and the query
+surface over it.
+
+Writing that line here rather than only in module 2's record is what keeps the duplication from
+looking accidental. Without it, module 5 arrives at a VPC that already has a flow log and has to
+guess whether to extend it, subscribe to it, or replace it — and extending a log group built to
+be deleted is the wrong answer in a way nothing would report. Whether module 5 subscribes to
+module 2's log group, replaces it, or ignores it entirely is module 5's decision to record; this
+layer only states that the two jobs are separate and that module 2's is the disposable one.
 
 ---
 

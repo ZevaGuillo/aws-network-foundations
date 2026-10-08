@@ -8,11 +8,11 @@
 Module 2's flow log exists to make its own NACL's ACCEPT/REJECT decisions measurable during
 module 2's own experiments (E0-E2). It is not module 2's job to be the repository's durable
 observability layer — that destination and the query surface over it belong to module 5. This
-record is the module-2 half of drawing that line; the matching edit to
-`docs/plans/module1-layer1-base-network.md` §1, which states module 5's half of the same split,
-is separate work not yet landed. Nothing in the current plan docs states the split today — this
-record and that pending edit are what establish it, not a restatement of something already
-written down.
+record is the module-2 half of drawing that line. The other half is stated in
+`docs/plans/module1-layer1-base-network.md` §1, where the module table a reader actually meets
+would otherwise show rows 2 and 5 both writing flow logs with nothing saying why that is not
+duplication. Neither this record nor that section restates something already written down
+elsewhere — together they are what establish the split.
 
 Building `FlowLogs` (`lib/module2-flow-logs.ts`) against that scope surfaced two costs that a
 flow log built for "just get it running" would have paid silently, and one further note on why
