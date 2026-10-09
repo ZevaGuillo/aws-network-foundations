@@ -34,7 +34,8 @@ export interface FlowLogsProps {
 
 /**
  * The evidence flow log: minimal, disposable, and scoped to module 2's own measurements.
- * Module 5 owns durable observability separately — see docs/adr/0035.
+ * Module 5 owns durable observability separately — see
+ * docs/adr/0035-the-flow-log-is-disposable-evidence.md.
  */
 export class FlowLogs extends Construct {
   /**

@@ -68,7 +68,8 @@ not against which operating systems might visit the site.
 not the port range.
 
 **What it costs, and the collateral is explicit.** `MODULE_2_NACL`'s `openEphemeralEgress:
-false` toggle — built to script the stateless-filter failure (ADR-0036) — removes the egress
+false` toggle — built to script the stateless-filter failure
+([ADR-0036](0036-scripted-breakage-toggle.md)) — removes the egress
 half of this same range, `AllowEphemeralOut`. `PORTS.frontend = 8080` sits inside
 1024-65535, so disabling that slot does not only produce the intended REJECT on the
 experiment's own probe; it also drops every ALB health check, because the ALB's forwarding

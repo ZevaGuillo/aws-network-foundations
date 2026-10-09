@@ -36,8 +36,8 @@ function tcpEntry(
  * These assertions guard the NACL's rule-numbering mechanism (design D2) and its two security
  * gaps (G2-02, G2-03, G2-04, G2-06, G2-07). Every one of them exists because the thing it
  * checks passes `cdk synth` and fails only at deploy, or not at all — the failure mode this
- * whole construct is built to retire. See docs/adr/0033 (rule numbering) and 0034 (ephemeral
- * range).
+ * whole construct is built to retire. See docs/adr/0033-rule-number-bands.md (rule numbering)
+ * and docs/adr/0034-ephemeral-range-rationale.md (ephemeral range).
  */
 describe('NetworkAcls', () => {
   test('associates exactly module 1\'s two public subnets, replacing their default NACL (G2-07)', () => {
