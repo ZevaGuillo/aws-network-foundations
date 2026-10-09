@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
+import { NetworkAcls } from './module2-network-acls';
 
 export interface Module2StackProps extends cdk.StackProps {
   /**
@@ -12,9 +13,15 @@ export interface Module2StackProps extends cdk.StackProps {
 
   /**
    * From `m1.publicPort` — the port module 1's external listener actually bound. See
-   * `Module1Stack.publicPort` for what a wrong value here would cost once a NACL reads it.
+   * `NetworkAclsProps.publicPort` for what a wrong value here would cost once the NACL reads it.
    */
   readonly publicPort: number;
+
+  /** See `NetworkAclsProps.deniedSources`. Defaults to `[]` inside `NetworkAcls` itself. */
+  readonly deniedSources?: readonly string[];
+
+  /** See `NetworkAclsProps.openEphemeralEgress`. Defaults to `true` inside `NetworkAcls` itself. */
+  readonly openEphemeralEgress?: boolean;
 }
 
 /**
@@ -23,11 +30,24 @@ export interface Module2StackProps extends cdk.StackProps {
  * (docs/adr/0014-one-stack-per-module.md), built from module 1's VPC by reference rather than
  * recreating any part of layer 1.
  *
- * This skeleton carries only the props module 2's later layers need. The NACL and the flow log
- * are later PRs' work.
+ * The flow log is a later PR's work; this one carries the NACL.
  */
 export class Module2Stack extends cdk.Stack {
+  public readonly networkAcls: NetworkAcls;
+
   constructor(scope: Construct, id: string, props: Module2StackProps) {
     super(scope, id, props);
+
+    this.networkAcls = new NetworkAcls(this, 'NetworkAcls', {
+      vpc: props.vpc,
+
+      // By subnetType, never by subnetGroupName — see NetworkAclsProps.subnets for what that
+      // string coupling would cost on a rename.
+      subnets: { subnetType: ec2.SubnetType.PUBLIC },
+
+      publicPort: props.publicPort,
+      deniedSources: props.deniedSources,
+      openEphemeralEgress: props.openEphemeralEgress,
+    });
   }
 }
