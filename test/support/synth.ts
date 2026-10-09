@@ -71,7 +71,18 @@ export function synthModule2(
   props?: Partial<Module2StackProps>,
   module1Props?: Module1StackProps,
 ): SynthesizedModule2 {
-  const app = new cdk.App();
+  const app = new cdk.App({
+    /**
+     * Mirrors `cdk.json`'s `@aws-cdk/core:defaultCrossStackReferences: "weak"` (ADR-0014).
+     * `jest` never loads `cdk.json` — only the real `cdk` CLI does — so without this, resolving
+     * `vpc.vpcId`/`subnetId` across the `Net-M1`/`Net-M2` seam hits CDK's own unconfigured-
+     * strength warning (`crossStackReferencesDefaultStrong`) on every test that touches it. That
+     * warning is a test-harness artifact, not a real one: the production `cdk synth` this app
+     * mirrors already has the flag from `cdk.json`. Omitting it here would make
+     * `Annotations.fromStack(Net-M2)` fail for a reason that cannot happen in the real deploy.
+     */
+    context: { '@aws-cdk/core:defaultCrossStackReferences': 'weak' },
+  });
   const module1 = new Module1Stack(app, 'TestStackM1', module1Props);
   const stack = new Module2Stack(app, 'TestStackM2', {
     vpc: module1.vpc,
