@@ -48,3 +48,6 @@ and what it costs). Prices are US East (N. Virginia) list prices at the date of 
 | [0029](0029-the-deep-check-is-a-reachability-probe.md) | The deep check is a reachability probe, not a health check | Accepted (amends 0019) | 2026-09-14 |
 | [0030](0030-instance-connect-endpoint-keeps-the-client-ip-off.md) | The Instance Connect Endpoint keeps the client IP off | Accepted | 2026-09-14 |
 | [0031](0031-one-runtime-node.md) | One runtime: Node | Accepted (supersedes 0025) | 2026-09-14 |
+| [0032](0032-module-2-own-stack.md) | Module 2 gets its own stack, and what that seam costs | Accepted | 2026-10-07 |
+| [0033](0033-rule-number-bands.md) | Rule numbers come from bands and declaration slots, never from a counter | Accepted | 2026-10-07 |
+| [0034](0034-ephemeral-range-rationale.md) | The ephemeral range serves the NAT gateway and the balancer, not the client | Accepted | 2026-10-07 |
