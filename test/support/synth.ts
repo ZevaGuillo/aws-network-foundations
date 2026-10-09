@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib/core';
 import { Template } from 'aws-cdk-lib/assertions';
 import { Module1Stack, Module1StackProps } from '../../lib/module1-stack';
+import { Module2Stack, Module2StackProps } from '../../lib/module2-stack';
 
 export interface Synthesized {
   /** Needed for annotation assertions, which read the construct tree rather than the template. */
@@ -36,4 +37,47 @@ export function synth(props?: Module1StackProps): Synthesized {
   const stack = new Module1Stack(app, 'TestStack', props);
 
   return { stack, template: Template.fromStack(stack) };
+}
+
+export interface SynthesizedModule2 {
+  /** For "module 1 is untouched" assertions — compared against `synth()`'s own template. */
+  readonly module1: Module1Stack;
+  readonly stack: Module2Stack;
+  readonly template: Template;
+}
+
+/**
+ * Module 2 cannot be synthesized alone: its required props, `vpc` and `publicPort`, are object
+ * references into a real `Module1Stack`. A generic `synth<T>(ctor, props)` is not a
+ * generalisation of `synth()` above — it would push this two-stack wiring into every module 2
+ * test file, the exact duplication this helper exists to prevent. `synth()` keeps its name,
+ * signature and return type; this is an addition, not a rename.
+ *
+ * The default wiring — `vpc: module1.vpc`, `publicPort: module1.publicPort` — is the production
+ * wiring from `bin/app.ts`, so a test exercising the real seam needs no `props` at all. `props`
+ * stays a `Partial<Module2StackProps>` so a test can override `publicPort` on its own without
+ * touching module 1 — the shape a future mutation test (certificate set, port left at 80) needs
+ * to exist and be shown to turn a NACL suite red.
+ *
+ * Both stacks stay environment-agnostic, on the same exception `synth()` documents above.
+ * **Open question, carried from design**: whether CDK permits a cross-stack reference between
+ * two environment-agnostic stacks in one `App` is expected to work and is exercised the moment
+ * a later construct reads a token off `vpc` (e.g. `vpc.vpcId`) into a resource property. If
+ * that ever throws, the fix is a fixed test environment on both stacks —
+ * `env: { account: '123456789012', region: 'us-east-1' }` — the same fallback `synth()` already
+ * documents for a zone-dependent assertion.
+ */
+export function synthModule2(
+  props?: Partial<Module2StackProps>,
+  module1Props?: Module1StackProps,
+): SynthesizedModule2 {
+  const app = new cdk.App();
+  const module1 = new Module1Stack(app, 'TestStackM1', module1Props);
+  const stack = new Module2Stack(app, 'TestStackM2', {
+    vpc: module1.vpc,
+    publicPort: module1.publicPort,
+    ...props,
+  });
+
+  return { module1, stack, template: Template.fromStack(stack) };
 }
