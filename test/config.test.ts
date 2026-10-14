@@ -26,4 +26,24 @@ describe('module 2 config', () => {
     // this array is a deliberate, reviewed change, not shipped policy.
     expect(MODULE_2_NACL.deniedSources).toEqual([]);
   });
+
+  test('openEphemeralEgress defaults to open — a plain deploy is not E2 mid-experiment', () => {
+    // The symmetric guard to the one above, and it exists because its absence was measured.
+    //
+    // E2 sets this to `false` on purpose to script the stateless-egress failure
+    // (docs/adr/0036-scripted-breakage-toggle.md). The construct is already proven correct in
+    // both branches by `test.each([[true], [false]])` in module2-network-acls.test.ts — but
+    // those cases pass explicit values and never read this one, so before this assertion
+    // existed nothing in the suite looked at *which* branch was committed.
+    //
+    // That is not a cosmetic gap. A committed `false` removes `AllowEphemeralOut`, which drops
+    // every ALB health check toward the frontend tier because PORTS.frontend = 8080 sits inside
+    // the ephemeral range: targets go unhealthy, the balancer serves nothing, and the clone that
+    // deployed it sees a timeout naming no resource. A green suite, a clean synth, a successful
+    // deploy, and an application that never answers.
+    //
+    // During the 2026-10-14 run the E2 branch passed all 82 tests, which is what moved this from
+    // a checklist line to an assertion — module2/evidence.md §5 E2.0 carries the finding.
+    expect(MODULE_2_NACL.openEphemeralEgress).toBe(true);
+  });
 });
