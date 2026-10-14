@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 358" width="940" height="358"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" fill="#1A1726"
+     role="img" aria-label="Two panels. In E1 the client SYN to port 80 is rejected on ingress by deny rule 10 and never reaches the load balancer. In E2 the SYN is allowed in by rule 100 and reaches the load balancer, but the returning SYN-ACK from port 80 is rejected on egress because the ephemeral allow at rule 100 was removed. Same client, same node, same port; the rejected packet and its direction differ.">
+  <style>
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg   { fill: #141221; }
+      .tx   { fill: #EEEBF7; }
+      .dim  { fill: #ACA4C6; }
+      .faint{ fill: #7E7698; }
+      .box  { fill: #241F3A; stroke: #463E68; }
+      .tnet { fill: #A77CFF; }
+      .rail { stroke: #FF5C70; }
+      .secl { fill: #FF5C70; }
+      .no   { stroke: #FF5C70; }
+      .nof  { fill: #FF5C70; }
+      .ok   { stroke: #9BC63B; }
+      .okf  { fill: #9BC63B; }
+      .node { fill: #7E7698; }
+    }
+  </style>
+
+  <rect class="bg" width="940" height="358" fill="#FBFAFD"/>
+
+  <defs>
+    <marker id="aok2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4F8A10"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== E1 ===================== -->
+  <text class="tx" x="20" y="20" font-size="14" font-weight="650" fill="#1A1726">E1 · deny by source</text>
+  <text class="faint mono" x="20" y="38" font-size="10" fill="#8B84A0">the request never arrives</text>
+
+  <rect class="box" x="20" y="52" width="420" height="286" rx="9" fill="#F4F2F8" stroke="#CFC8E0" stroke-width="1.2"/>
+
+  <text class="dim" x="40" y="78" font-size="11.5" fill="#5B5570">client 157.100.134.236</text>
+  <circle class="node" cx="48" cy="104" r="9" fill="#8B84A0"/>
+
+  <path class="rail" d="M232 68 L232 322" fill="none" stroke="#DD344C" stroke-width="2.6"/>
+  <text class="secl mono" x="240" y="84" font-size="10" fill="#DD344C">net-m2 ACL</text>
+
+  <!-- the SYN, stopped on the way in -->
+  <line class="no" x1="62" y1="104" x2="206" y2="104" stroke="#DD344C" stroke-width="2"/>
+  <path class="no" d="M218 94 L244 114 M244 94 L218 114" fill="none" stroke="#DD344C" stroke-width="2"/>
+  <text class="dim mono" x="70" y="94" font-size="10.5" fill="#5B5570">SYN → :80</text>
+  <text class="nof mono" x="70" y="128" font-size="10.5" fill="#DD344C">rule 10 · DENY 157.100.134.236/32</text>
+
+  <!-- the balancer, never reached -->
+  <g transform="translate(330,86)" opacity="0.4">
+    <rect class="tnet" width="34" height="34" rx="7" fill="#8C4FFF"/>
+    <circle cx="17" cy="11" r="3.4" fill="#fff"/>
+    <circle cx="9" cy="24" r="3" fill="#fff"/>
+    <circle cx="25" cy="24" r="3" fill="#fff"/>
+    <path d="M17 14 L9 21 M17 14 L25 21" stroke="#fff" stroke-width="1.6" fill="none"/>
+  </g>
+  <text class="faint mono" x="318" y="138" font-size="10" fill="#8B84A0">10.0.1.110 — never reached</text>
+
+  <text class="faint mono" x="40" y="182" font-size="10" fill="#8B84A0">flow log, 10:51:53</text>
+  <rect class="box" x="36" y="192" width="388" height="52" rx="5" fill="#F4F2F8" stroke="#CFC8E0" stroke-width="1.2"/>
+  <text class="nof mono" x="48" y="212" font-size="10.5" fill="#DD344C">REJECT  157.100.134.236 → 10.0.1.110</text>
+  <text class="nof mono" x="48" y="230" font-size="10.5" fill="#DD344C">sport=31142  dport=80   ingress</text>
+
+  <text class="faint mono" x="40" y="274" font-size="10" fill="#8B84A0">The dropped packet is the SYN. A security</text>
+  <text class="faint mono" x="40" y="288" font-size="10" fill="#8B84A0">group could express this hop too — it just</text>
+  <text class="faint mono" x="40" y="302" font-size="10" fill="#8B84A0">cannot express it as a deny.</text>
+
+  <!-- ===================== E2 ===================== -->
+  <text class="tx" x="500" y="20" font-size="14" font-weight="650" fill="#1A1726">E2 · the stateless gotcha</text>
+  <text class="faint mono" x="500" y="38" font-size="10" fill="#8B84A0">the request arrives; the answer is stranded</text>
+
+  <rect class="box" x="500" y="52" width="420" height="286" rx="9" fill="#F4F2F8" stroke="#CFC8E0" stroke-width="1.2"/>
+
+  <text class="dim" x="520" y="78" font-size="11.5" fill="#5B5570">client 157.100.134.236</text>
+  <circle class="node" cx="528" cy="104" r="9" fill="#8B84A0"/>
+
+  <path class="rail" d="M712 68 L712 322" fill="none" stroke="#DD344C" stroke-width="2.6"/>
+  <text class="secl mono" x="614" y="84" font-size="10" fill="#DD344C">net-m2 ACL</text>
+
+  <!-- the SYN, allowed in -->
+  <line class="ok" x1="542" y1="104" x2="800" y2="104" stroke="#4F8A10" stroke-width="1.8" marker-end="url(#aok2)"/>
+  <text class="okf mono" x="550" y="94" font-size="10.5" fill="#4F8A10">SYN → :80 · rule 100 ALLOW</text>
+
+  <!-- the balancer answers -->
+  <g transform="translate(810,86)">
+    <rect class="tnet" width="34" height="34" rx="7" fill="#8C4FFF"/>
+    <circle cx="17" cy="11" r="3.4" fill="#fff"/>
+    <circle cx="9" cy="24" r="3" fill="#fff"/>
+    <circle cx="25" cy="24" r="3" fill="#fff"/>
+    <path d="M17 14 L9 21 M17 14 L25 21" stroke="#fff" stroke-width="1.6" fill="none"/>
+  </g>
+  <text class="faint mono" x="778" y="152" font-size="10" fill="#8B84A0">10.0.0.242 — answers</text>
+
+  <!-- the SYN-ACK, stopped on the way out -->
+  <line class="no" x1="806" y1="172" x2="726" y2="172" stroke="#DD344C" stroke-width="2"/>
+  <path class="no" d="M700 162 L726 182 M726 162 L700 182" fill="none" stroke="#DD344C" stroke-width="2"/>
+  <text class="nof mono" x="548" y="196" font-size="10.5" fill="#DD344C">SYN-ACK from :80 — rule 100 was removed</text>
+
+  <text class="faint mono" x="520" y="228" font-size="10" fill="#8B84A0">flow log, 11:09:51</text>
+  <rect class="box" x="516" y="238" width="388" height="52" rx="5" fill="#F4F2F8" stroke="#CFC8E0" stroke-width="1.2"/>
+  <text class="nof mono" x="528" y="258" font-size="10.5" fill="#DD344C">REJECT  10.0.0.242 → 157.100.134.236</text>
+  <text class="nof mono" x="528" y="276" font-size="10.5" fill="#DD344C">sport=80     dport=31205  egress</text>
+
+  <text class="faint mono" x="520" y="316" font-size="10" fill="#8B84A0">A security group would have let this back out with no egress rule at all.</text>
+</svg>

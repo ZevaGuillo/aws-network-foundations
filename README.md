@@ -27,6 +27,13 @@ plan is in [`docs/plans/`](docs/plans/module2-network-acls-flow-logs.md), the pr
 [`module2/experiment-runbook.md`](module2/experiment-runbook.md), and the measurements in
 [`module2/evidence.md`](module2/evidence.md).
 
+![Net-M1 topology: a VPC on 10.0.0.0/16 across two availability zones, each with one public and one private /24 subnet. The internet gateway sits above the VPC; the public subnets hold the internet-facing balancer nodes and, in zone a only, the single NAT gateway; the private subnets hold the internal balancer and both EC2 tiers.](docs/diagrams/module1-topology.svg)
+
+Three more figures — the security-group trust chain, what module 2 replaced, and why E1 and E2 are
+indistinguishable from the client — are in [`docs/diagrams/`](docs/diagrams/README.md), which also
+says what to re-check when the topology changes. They are hand-authored, so unlike everything else
+here nothing holds them true.
+
 > **Two stacks now, so `npx cdk deploy` needs a name.** The CLI refuses a bare `deploy` once an
 > app holds more than one stack, and `--all` would deploy `Net-M2` alongside `Net-M1` — which
 > destroys module 2's baseline measurement before it can be taken. Name the stack:
