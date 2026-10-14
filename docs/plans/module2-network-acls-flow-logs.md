@@ -49,6 +49,13 @@ A second stack over module 1's public subnets. Two constructs and one number tha
 ([ADR-0032](../adr/0032-module-2-own-stack.md)). It receives module 1's VPC and resolved public
 port as object references from the same `App`, and it cannot synthesize without them.
 
+![Before and after cdk deploy Net-M2. Before, all four subnets sit on the VPC default network ACL with its rule 100 allow-all in both directions. After, only the two public subnets are associated with the new net-m2 ACL; the two private subnets stay on the default. A VPC flow log writes to its own log group at seven days retention.](../diagrams/module2-nacl-boundary.svg)
+
+The association is a **replacement**, not a layer, and the subnet ids above are the measured
+proof: two of the four changed owner and two did not. That is the whole reason §4's baseline step
+has a deadline — run it after the deploy and it records a NACL that no longer governs anything
+being measured.
+
 ### Where this stops following the lab
 
 The SAA-C03 lab proves one thing — a NACL can deny by source IP and a security group cannot —
@@ -261,6 +268,14 @@ The dropped packet is the **SYN-ACK**, not an HTTP response. The handshake never
 `curl -v` stays at `Trying <ip>:80` and never prints `Connected`. From outside, E2 looks exactly
 like E1's drop and the health-check collateral is invisible — only the flow log and target health
 show it.
+
+![E1 against E2. In E1 the client SYN to port 80 is rejected on ingress by deny rule 10 and never reaches the balancer. In E2 the SYN is allowed in by rule 100 and the balancer answers, but the returning SYN-ACK from port 80 is rejected on egress because the ephemeral allow at rule 100 was removed.](../diagrams/module2-direction-flip.svg)
+
+Side by side with the measured log lines, the two stop being confusable: the rejected packet and
+its direction are the only things that differ, and neither is visible from the client. This is
+also the one pattern the flow log attributes on its own — an egress REJECT carrying `srcport=80`
+toward a client that just sent a SYN can only be a stateless filter, because a stateful one needs
+no rule to pass a reply.
 
 ### Measuring the fix too early records it as a failure
 

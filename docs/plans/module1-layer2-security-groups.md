@@ -37,6 +37,16 @@ two instances to two hundred.
        backendSg ◄──── 22 ──── eiceSg
 ```
 
+![The security group trust chain: the internet reaches the external balancer group on tcp 80, which is then the source allowed into the frontend group on 8080, which is the source allowed into the internal balancer group on 80, which is the source allowed into the backend group on 8080. The Instance Connect group reaches both compute groups on tcp 22. Egress is open on every group.](../diagrams/module1-security-group-chain.svg)
+
+The same chain, with each rule's **source** written out underneath — which is the whole argument
+of this layer, and the one thing the sketch above cannot show.
+
+Note the first hop differs between the two: the sketch carries `443` and the figure carries `80`.
+Both are right. There is one decision, `publicPort(certificateArn)`, and it resolves to 443 with a
+certificate and 80 without ([ADR-0018](../adr/0018-the-certificate-is-optional.md)); the figure
+shows what actually deployed, which had no certificate.
+
 ### The part that is not obvious
 
 `backendSg` accepts `internalAlbSg`, **not** `frontendSg`. The instinct is to let the backend

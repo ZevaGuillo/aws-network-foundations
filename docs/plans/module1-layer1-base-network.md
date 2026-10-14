@@ -27,6 +27,15 @@ That table is the reason the configuration module carries a repo-wide address pl
 module 1's own range: two of the five modules are about connecting VPCs, and address ranges
 cannot be changed after creation.
 
+![Net-M1 topology: a VPC on 10.0.0.0/16 across two availability zones, each with one public and one private /24 subnet. The internet gateway sits above the VPC; the public subnets hold the internet-facing balancer nodes and, in zone a only, the single NAT gateway; the private subnets hold the internal balancer and both EC2 tiers.](../diagrams/module1-topology.svg)
+
+Everything later layers add lands inside that picture, and the addresses in it are from the
+2026-10-14 deploy rather than from the plan. The single NAT gateway in zone a is the shape of the
+whole diagram: the CDK's default is one per zone, and what one gives up is zone b's egress
+depending on zone a ([ADR-0006](../adr/0006-single-nat-gateway-by-default.md)).
+[`docs/diagrams/`](../diagrams/README.md) lists what to re-check when any of this changes — these
+figures are hand-authored and nothing holds them.
+
 ### Two modules write flow logs, and the split is deliberate
 
 Rows 2 and 5 both say flow log, and they are not the same resource. Module 2's is an
