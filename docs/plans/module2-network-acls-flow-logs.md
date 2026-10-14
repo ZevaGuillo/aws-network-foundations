@@ -1,6 +1,6 @@
 # Implementation Plan — Module 2: Network ACLs + VPC Flow Logs
 
-**Status:** implemented and test-guarded; not yet deployed, and nothing measured
+**Status:** implemented, test-guarded, deployed and measured (2026-10-14) — see §9
 **Scope:** `lib/module2-stack.ts` + `lib/module2-network-acls.ts` + `lib/module2-flow-logs.ts`
 and their assertions, the `MODULE_2_*` block in `lib/config.ts`, one new field on
 `Module1Stack`, wired into `bin/app.ts`
@@ -218,8 +218,8 @@ from the log alone is E2's, below, because a security group never blocks a reply
 
 ## 6. The experiments, and the order they run in
 
-The procedure, the commands and the expected values live in `modulo 2/guion-experimentos.md`;
-the measurements land in `modulo 2/evidencia-modulo2.md`. This section carries only what the
+The procedure, the commands and the expected values live in `module2/experiment-runbook.md`;
+the measurements land in `module2/evidence.md`. This section carries only what the
 infrastructure imposes on them.
 
 | Order | Experiment | Infrastructure state |
@@ -235,7 +235,7 @@ evidence.
 
 One note deliberately not duplicated here: an ALB does not answer ICMP, so E0's ping row is only
 meaningful when `$TARGET` is an instance. That already sits in the E0 row of
-`guion-experimentos.md`, where the command is, and it is a runbook caveat rather than anything
+`module2/experiment-runbook.md`, where the command is, and it is a runbook caveat rather than anything
 this template can assert.
 
 ### E2 produces two REJECT patterns, and only one of them is the lesson
@@ -287,8 +287,8 @@ shortest reason is that the only real CloudFormation-level guard is the `Export`
 lock that `@aws-cdk/core:defaultCrossStackReferences: weak` deliberately traded away repo-wide,
 and that module 3 still depends on.
 
-So the guard is the checklist, which is why `modulo 2/guion-experimentos.md` and
-`evidencia-modulo2.md` naming the stacks correctly is part of the guard rather than tidying — a
+So the guard is the checklist, which is why `module2/experiment-runbook.md` and
+`module2/evidence.md` naming the stacks correctly is part of the guard rather than tidying — a
 checklist with the wrong stack names guards nothing.
 
 What `weak` costs in exchange is three lines in module 1's template. Wiring `Net-M2` to read
@@ -336,7 +336,7 @@ the same `weak` context, so the suite tests the mode that ships instead of a str
 
 ## 9. Verification — done
 
-`npm test` — 10 suites, 82 tests passed. `npx tsc --noEmit` — clean.
+`npm test` — 10 suites, 83 tests passed (82 at the time of the run; §9 added one). `npx tsc --noEmit` — clean.
 `npx cdk synth --strict` — clean for both `Net-M1` and `Net-M2`.
 
 What `cdk.out/Net-M2.template.json` actually contains: 1 `NetworkAcl`, 2 associations, 1
@@ -344,9 +344,34 @@ What `cdk.out/Net-M2.template.json` actually contains: 1 `NetworkAcl`, 2 associa
 outputs. The NACL's `VpcId` renders as `Fn::GetStackOutput`, confirming the `weak` path in the
 real CLI synth and not only under jest.
 
-**Not verified, because it cannot be:** every number in `evidencia-modulo2.md`. Nothing in this
-module has been deployed. The suite's job is to make the measurements trustworthy, not to
-replace them.
+### Deployed and measured — 2026-10-14
+
+All four experiments ran in one ~1h 15m window in `us-east-1` for about $0.16, and the
+infrastructure was destroyed and verified empty afterwards. Every number is in
+[`module2/evidence.md`](../../module2/evidence.md); what the run settled about this plan:
+
+| Claim in this plan | Outcome |
+|---|---|
+| The nine rule numbers and their bands (§3) | Confirmed entry by entry against AWS |
+| G2-05 — log group at 7 days, gone on destroy | Confirmed in all three states: template, live, and after teardown |
+| G2-06 — ICMP exactly `{-1,-1}` | Confirmed live, once the query stopped comparing a string column to a numeric literal |
+| `weak` adds three `Output`s to `Net-M1` (§7) | Confirmed, with the exact predicted names |
+| Disabling a slot renumbers nothing (§3) | Confirmed: `AllowHttpsOut` held 110 with 100 standing empty |
+| E1 and E2 are externally indistinguishable (§6) | Confirmed, and separable in the log only by `flow-direction` |
+
+Three things the run found that this plan did not anticipate:
+
+- **E2 needs `deniedSources` back at `[]`**, which §6 never states. With E1's deny still live the
+  SYN never reaches the subnet, so E2 measures E1 again — and the external symptom is identical.
+  Now a mandatory step in the runbook.
+- **`openEphemeralEgress` had no default-value guard.** The E2 branch passed all 82 tests while
+  `deniedSources` turning the suite red is exactly what made E1 safe. `test/config.test.ts` now
+  carries the symmetric assertion.
+- **The deploy direction resolves the dependency on its own** (`Including dependency stacks:
+  Net-M1`), which narrows §11's open question without answering it: `destroy` still consults
+  nothing.
+
+§11's destroy-order question remains open and deliberately unmeasured.
 
 ---
 
