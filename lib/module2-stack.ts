@@ -62,7 +62,7 @@ export class Module2Stack extends cdk.Stack {
    * two values this stack reads *from* module 1; nothing here is meant to be read by a third
    * stack, so none of these need an export either).
    *
-   * Each row mirrors one line of `evidencia-modulo2.md`'s infrastructure table (design D7).
+   * Each row mirrors one line of `module2/evidence.md`'s infrastructure table (design D7).
    */
   private declareOutputs(props: Module2StackProps): void {
     const openEphemeralEgress = props.openEphemeralEgress ?? true;
