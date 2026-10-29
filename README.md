@@ -13,12 +13,17 @@ ones that must be made before the first VPC exists, because they cannot be chang
 |---|---|---|
 | 1 | Base network, the security groups, the balancers, then the application | **Layers 1–4 built, deployed and measured** |
 | 2 | Network ACLs over the public subnets, and the flow log that makes their decisions readable | **Built, deployed and measured** |
-| 3 | VPC peering across three VPCs, proving it is not transitive | Address range reserved |
+| 3 | VPC peering across three VPCs, proving it is not transitive | **Planned — nothing deployed** |
 | 4 | PrivateLink between VPCs that cannot be peered | Address range reserved |
 | 5 | Durable observability — the destination the module 2 flow log deliberately is not | Not started |
 
 Module 5 is counted in [ADR-0003](docs/adr/0003-repo-wide-ipv4-addressing-plan.md) but not yet
 specified.
+
+Module 3 is planned and has no code. Its shape is in
+[`docs/plans/module3-vpc-peering.md`](docs/plans/module3-vpc-peering.md), and the AWS lab it derives
+from — along with the nine things that lab gets wrong, one of which bills by the hour — is read in
+[`module3/lab-notes.md`](module3/lab-notes.md).
 
 Module 2 is the first one that **denies**. Every control module 1 added is an allow: a security
 group can say who may come in and cannot say who may not. It is also the first that produces
